@@ -36,15 +36,15 @@ Tech Stack
 
 | Component        | Technology               |
 |------------------|--------------------------|
-| Frontend         | React Native / Flutter   |
-| Backend          | Node.js / Django         |
+| Frontend         | React / Flutter          |
+| Backend          | Node.js                  |
 | Database         | Firebase / PostgreSQL    |
-| Maps & Tracking  | Google Maps API / Mapbox |
+| Maps & Tracking  | Google Maps API          |
 | Auth             | Firebase Auth / OAuth2   |
 
 
 Prerequisites
 
-- Node.js / Python  
+- Node.js  
 - Firebase / PostgreSQL setup  
 - Google Maps API Key  
