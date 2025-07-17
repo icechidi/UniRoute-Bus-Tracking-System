@@ -13,9 +13,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Completer<GoogleMapController> _controller = Completer();
 
-  // Lefkoşa, North Cyprus
+  // Lefkoşa, North Cyprus Longitude and Latitude
   static const LatLng _lefkoshaLatLng = LatLng(35.1856, 33.3823);
-
+// Initial camera position for the map
   static const CameraPosition _kLefkosha = CameraPosition(
     target: _lefkoshaLatLng,
     zoom: 16.0,
@@ -28,12 +28,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
   }
-
+// Handle map creation and user location
   Future<void> _onMapCreated(GoogleMapController controller) async {
     _controller.complete(controller);
     await _handleLocation();
   }
-
+// Handle user location and add marker
   Future<void> _handleLocation() async {
     final hasPermission = await _checkAndRequestPermission();
     if (!hasPermission) return;
@@ -41,7 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final position = await Geolocator.getCurrentPosition();
     final LatLng userLatLng = LatLng(position.latitude, position.longitude);
 
-    // Add marker
+    // Add marker to user's current location and move camera if within 20km radius of Lefkoşa
     setState(() {
       _userMarker = Marker(
         markerId: const MarkerId("user"),
@@ -51,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     });
 
-    // 🧠 Move camera only if within 20km radius of Lefkoşa
+    // Move camera only if within 20km radius of Lefkoşa
     final double distance = Geolocator.distanceBetween(
       _lefkoshaLatLng.latitude,
       _lefkoshaLatLng.longitude,
@@ -64,7 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
       mapController.animateCamera(CameraUpdate.newLatLng(userLatLng));
     }
   }
-
+// Check and request location permission
   Future<bool> _checkAndRequestPermission() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
   }
-
+// Build the UI with Google Map
   @override
   Widget build(BuildContext context) {
     return Scaffold(

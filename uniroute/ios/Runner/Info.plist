@@ -26,8 +26,9 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
-	<key>UIMainStoryboardFile</key>
-	<string>Main</string>
+
+	<!-- Removed unused UIMainStoryboardFile -->
+	
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -41,16 +42,21 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/> 
+	<true/>
 
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We need your location to show live bus tracking.</string>
-
+	<!-- Required by Google Maps -->
 	<key>io.flutter.embedded_views_preview</key>
 	<true/>
 
+	<!-- Required for location access -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need your location to show live bus tracking.</string>
+
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app uses your location to show your position on the map and live bus routes, even when in background.</string>
 </dict>
 </plist>
