@@ -44,6 +44,13 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/> 
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need your location to show live bus tracking.</string>
+
+	<key>io.flutter.embedded_views_preview</key>
 	<true/>
+
 </dict>
 </plist>
