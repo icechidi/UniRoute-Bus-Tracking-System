@@ -60,5 +60,6 @@
   "enter_code": "E-postanıza gönderilen kodu girin",
   "verify": "Doğrula",
   "verification_code_sent": "Doğrulama kodu e-postanıza gönderildi.",
-  "resend_in": "{seconds}s içinde tekrar gönder"
+  "resend_in": "60 seconds içinde tekrar gönder",
+  "invalid_code": "Girdiğiniz kod geçersiz veya süresi dolmuş."
 }

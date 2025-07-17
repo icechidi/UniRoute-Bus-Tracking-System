@@ -3,19 +3,25 @@ import 'package:flutter_signin_button/flutter_signin_button.dart';
 import '../auth_services.dart';
 import 'success_screen.dart';
 
+/// Stateless login screen for drivers using Google (and optionally Apple) sign-in.
 class DriverLoginScreen extends StatelessWidget {
   const DriverLoginScreen({super.key});
 
+  /// Handles Google Sign-In logic and navigation
   Future<void> _handleGoogleLogin(BuildContext context) async {
     final user = await AuthServices.signInWithGoogle();
+
+    // Ensure the widget is still mounted in the widget tree
     if (!context.mounted) return;
 
     if (user != null) {
+      // If login is successful, navigate to the success screen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const SuccessScreen()),
       );
     } else {
+      // If login fails, show an error dialog
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -43,6 +49,8 @@ class DriverLoginScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 20),
+
+              // Back button and settings icon
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -60,29 +68,44 @@ class DriverLoginScreen extends StatelessWidget {
                   ),
                 ],
               ),
+
               const SizedBox(height: 30),
+
+              // Logo
               Image.asset('assets/images/bus_logo.png', width: 180),
+
               const SizedBox(height: 40),
+
+              // Title and subtitle
               const Text("Login",
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               const Text("Sign in using your Google account",
                   style: TextStyle(color: Colors.grey)),
+
               const SizedBox(height: 20),
+
+              // Google sign-in button
               SignInButton(
                 Buttons.Google,
                 text: "Continue with Google",
                 onPressed: () => _handleGoogleLogin(context),
               ),
+
               const SizedBox(height: 16),
+
+              // Apple sign-in button (currently placeholder)
               SignInButton(
                 Buttons.Apple,
                 text: "Continue with Apple",
                 onPressed: () {
-                  // Apple sign-in logic
+                  // Apple sign-in logic to be implemented here
                 },
               ),
+
               const SizedBox(height: 16),
+
+              // Terms and Privacy Policy text
               RichText(
                 textAlign: TextAlign.center,
                 text: const TextSpan(
@@ -103,6 +126,7 @@ class DriverLoginScreen extends StatelessWidget {
                   ],
                 ),
               ),
+
               const SizedBox(height: 24),
             ],
           ),

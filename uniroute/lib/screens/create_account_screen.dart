@@ -1,3 +1,4 @@
+// Required Flutter, Firebase, and third-party packages
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 
+/// A screen for user account creation via email/password or Google sign-in.
 class CreateAccountScreen extends StatefulWidget {
   const CreateAccountScreen({super.key});
 
@@ -19,21 +21,25 @@ class CreateAccountScreen extends StatefulWidget {
 
 class _CreateAccountScreenState extends State<CreateAccountScreen>
     with SingleTickerProviderStateMixin {
+  // Controllers for form fields
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  // UI state flags
   bool _isLoading = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
   bool _success = false;
 
+  // Animation for error/success dialogs
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
+    // Setup animation controller
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -53,15 +59,18 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     super.dispose();
   }
 
+  /// Validates input and creates a new user account via Firebase Auth.
   Future<void> _createAccount() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirm = _confirmPasswordController.text.trim();
 
+    // Regex for input validation
     final emailRegex = RegExp(r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$");
     final passwordRegex =
         RegExp(r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#\$&*~]).{6,}$');
 
+    // Input validation
     if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
       _showErrorDialog("fields_required".tr());
       return;
@@ -82,14 +91,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     setState(() => _isLoading = true);
 
     try {
-      // Create the user and handle 'email-already-in-use' in the exception
       final auth = FirebaseAuth.instance;
+
+      // Try creating user
       final userCredential = await auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // Create user document in Firestore
+      // Create user document in Firestore for additional info
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user?.email)
@@ -100,16 +110,20 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
         'uid': userCredential.user?.uid,
       });
 
+      // Trigger success animation
       setState(() => _success = true);
       _animationController.forward();
 
       await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return;
+
+      // Navigate to complete profile screen
       Navigator.pushReplacementNamed(context, '/additionalInfo');
     } on FirebaseAuthException catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack);
-      String errorMessage = "signup_failed".tr();
 
+      // Localized FirebaseAuth error handling
+      String errorMessage = "signup_failed".tr();
       if (e.code == 'email-already-in-use') {
         errorMessage = "user_already_exists".tr();
       } else if (e.code == 'weak-password') {
@@ -128,6 +142,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     }
   }
 
+  /// Signs in the user using Google authentication.
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
 
@@ -136,15 +151,16 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
       late UserCredential userCredential;
 
       if (kIsWeb) {
+        // Google sign-in for web platforms
         final googleProvider = GoogleAuthProvider();
         userCredential = await auth.signInWithPopup(googleProvider);
       } else {
+        // Google sign-in for mobile platforms
         final googleSignIn = GoogleSignIn();
         final googleUser = await googleSignIn.signIn();
-
         if (googleUser == null) {
           setState(() => _isLoading = false);
-          return; // User canceled the sign-in
+          return; // Sign-in cancelled by user
         }
 
         final googleAuth = await googleUser.authentication;
@@ -158,11 +174,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
       final user = userCredential.user;
       if (user == null) throw Exception("Google sign-in failed - no user");
 
+      // Check if Firestore user document exists
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.email)
           .get();
 
+      // Create user profile in Firestore if new
       if (!userDoc.exists) {
         await FirebaseFirestore.instance
             .collection('users')
@@ -185,7 +203,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     } on FirebaseAuthException catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack);
       if (e.code != 'ERROR_ABORTED_BY_USER') {
-        // Ignore canceled sign-in
         _showErrorDialog("google_signin_failed".tr());
       }
     } catch (e, stack) {
@@ -197,6 +214,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     }
   }
 
+  /// Shows a styled error dialog with animation
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -218,6 +236,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     _animationController.forward(from: 0);
   }
 
+  /// UI rendering
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -256,6 +275,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
+
+                // Email input
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -266,7 +287,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
+                // Password input
                 TextField(
                   controller: _passwordController,
                   obscureText: !_showPassword,
@@ -284,7 +308,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
+                // Confirm password input
                 TextField(
                   controller: _confirmPasswordController,
                   obscureText: !_showConfirmPassword,
@@ -304,7 +331,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 24),
+
+                // Continue button or loading indicator
                 _isLoading
                     ? const CircularProgressIndicator()
                     : SizedBox(
@@ -324,6 +354,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                           ),
                         ),
                       ),
+
                 const SizedBox(height: 16),
 
                 // OR Divider
@@ -343,29 +374,29 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
 
                 const SizedBox(height: 16),
 
+                // Google sign-in button
                 SignInButton(
                   Buttons.Google,
                   text: "continue_google".tr(),
-                  onPressed: _isLoading
-                      ? () {}
-                      : () {
-                          _signInWithGoogle();
-                        },
+                  onPressed: _isLoading ? () {} : _signInWithGoogle,
                 ),
+
                 const SizedBox(height: 8),
+
+                // Apple sign-in (placeholder)
                 SignInButton(
                   Buttons.Apple,
                   text: "continue_apple".tr(),
                   onPressed: () {
                     if (!_isLoading) {
-                      // Apple sign-in logic to be implemented
+                      // Apple Sign-in not yet implemented
                     }
                   },
                 ),
 
                 const SizedBox(height: 16),
 
-                // Tappable Terms & Privacy
+                // Terms and privacy policy links
                 Text.rich(
                   TextSpan(
                     text: "By clicking continue, you agree to our ",
@@ -393,6 +424,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                   textAlign: TextAlign.center,
                 ),
 
+                // Success animation
                 if (_success)
                   Padding(
                     padding: const EdgeInsets.only(top: 24),

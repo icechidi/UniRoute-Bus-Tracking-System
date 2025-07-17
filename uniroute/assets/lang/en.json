@@ -60,5 +60,6 @@
   "enter_code": "Enter the code sent to your email",
   "verify": "Verify",
   "verification_code_sent": "Verification code has been sent to your email.",
-  "resend_in": "Resend in {seconds}s"
+  "resend_in": "Resend in 60 seconds",
+  "invalid_code": "The code you entered is invalid or expired."
 }

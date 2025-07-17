@@ -1,3 +1,4 @@
+// Flutter & Firebase imports
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -6,11 +7,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:intl_phone_field/phone_number.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
-
-import 'email_verification_screen.dart';
 import 'dart:math';
 
+import 'email_verification_screen.dart';
+
+/// Screen shown after initial account creation, to complete the user's profile.
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
 
@@ -20,21 +23,25 @@ class CompleteProfileScreen extends StatefulWidget {
 
 class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     with SingleTickerProviderStateMixin {
+  // Text controllers for form fields
   final TextEditingController fullNameController = TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController countryController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
 
+  // State variables
   bool _isSubmitting = false;
   bool _isCheckingUsername = false;
   String? _usernameError;
   List<String> _usernameSuggestions = [];
   PhoneNumber? _phoneNumber;
+
+  // Animations for success feedback
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
 
-  // Constants for validation
+  // Constants for username validation
   static const _minUsernameLength = 3;
   static const _maxUsernameLength = 15;
   static final _usernameRegex = RegExp(r'^[a-zA-Z0-9_]+$');
@@ -42,8 +49,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
   @override
   void initState() {
     super.initState();
+
+    // Start checking for username uniqueness when user types
     usernameController.addListener(_debounceUsernameCheck);
 
+    // Initialize animations
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
@@ -58,16 +68,19 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     );
   }
 
-  // Debounce username checks to prevent too many requests
+  Timer? _timer;
+
+  /// Debounce logic to limit frequency of username availability checks
   void _debounceUsernameCheck() {
     _timer?.cancel();
     _timer = Timer(const Duration(milliseconds: 500), _checkUsernameUnique);
   }
 
-  Timer? _timer;
-
+  /// Checks whether the entered username is available
   Future<void> _checkUsernameUnique() async {
     final username = usernameController.text.trim();
+
+    // Clear errors and suggestions if username is empty
     if (username.isEmpty) {
       setState(() {
         _usernameError = null;
@@ -76,7 +89,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
       return;
     }
 
-    // Length validation
+    // Check for length constraints
     if (username.length < _minUsernameLength) {
       setState(() {
         _usernameError = "username_too_short".tr();
@@ -93,7 +106,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
       return;
     }
 
-    // Character validation
+    // Check for valid characters
     if (!_usernameRegex.hasMatch(username)) {
       setState(() {
         _usernameError = "username_invalid_chars".tr();
@@ -105,6 +118,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     setState(() => _isCheckingUsername = true);
 
     try {
+      // Query Firestore to check if username is already taken
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('username', isEqualTo: username.toLowerCase())
@@ -112,6 +126,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
           .get();
 
       if (snapshot.docs.isNotEmpty) {
+        // If taken, generate 3 alternative suggestions
         _usernameSuggestions = _generateValidSuggestions(username);
         setState(() {
           _usernameError = "username_taken_suggestions"
@@ -132,6 +147,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     }
   }
 
+  /// Generate valid alternative usernames by appending random 4-digit numbers
   List<String> _generateValidSuggestions(String base) {
     final random = Random();
     final suggestions = <String>[];
@@ -185,6 +201,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                         Center(
                           child: Column(
                             children: [
+                              // App logo
                               Image.asset(
                                 'assets/images/bus_logo.png',
                                 height: 100,
@@ -200,13 +217,19 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                             ],
                           ),
                         ),
+
                         const SizedBox(height: 30),
+
+                        // Full Name Input
                         TextField(
                           controller: fullNameController,
                           decoration: _inputDecoration("full_name".tr()),
                           textCapitalization: TextCapitalization.words,
                         ),
+
                         const SizedBox(height: 16),
+
+                        // Username Input with validation and suggestions
                         TextField(
                           controller: usernameController,
                           maxLength: _maxUsernameLength,
@@ -228,6 +251,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                                 : null,
                           ),
                         ),
+
+                        // Suggestion Chips for username
                         if (_usernameSuggestions.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -247,7 +272,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                                   .toList(),
                             ),
                           ),
+
                         const SizedBox(height: 16),
+
+                        // Country Picker
                         GestureDetector(
                           onTap: () {
                             showCountryPicker(
@@ -272,7 +300,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 16),
+
+                        // Phone Number Input with validation
                         IntlPhoneField(
                           controller: phoneController,
                           decoration: _inputDecoration("phone".tr()),
@@ -280,6 +311,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                           onChanged: (phone) {
                             _phoneNumber = phone;
                           },
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ], // ✅ Restrict input to digits only
                           validator: (phone) {
                             if (phone?.number.isEmpty ?? true) {
                               return "phone_required".tr();
@@ -290,7 +324,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                             return null;
                           },
                         ),
+
                         const SizedBox(height: 30),
+
+                        // Submit Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -310,7 +347,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                                         color: Colors.white, fontSize: 16)),
                           ),
                         ),
+
                         const SizedBox(height: 16),
+
+                        // Terms and Privacy links
                         Center(
                           child: Text.rich(
                             TextSpan(
@@ -345,6 +385,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
                             textAlign: TextAlign.center,
                           ),
                         ),
+
                         const SizedBox(height: 30),
                       ],
                     ),
@@ -355,6 +396,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     );
   }
 
+  /// Input styling used throughout the form
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
@@ -368,13 +410,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     );
   }
 
+  /// Called when the user taps "Continue" to submit the profile
   Future<void> _submitProfile() async {
     final fullName = fullNameController.text.trim();
     final username = usernameController.text.trim();
     final country = countryController.text.trim();
     final email = FirebaseAuth.instance.currentUser?.email;
 
-    // Validate all fields
+    // Ensure all required fields are filled
     if (fullName.isEmpty ||
         username.isEmpty ||
         country.isEmpty ||
@@ -387,7 +430,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
       return;
     }
 
-    // Validate username again
+    // Revalidate username before submission
     if (_usernameError != null || !_usernameRegex.hasMatch(username)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('invalid_username'.tr())),
@@ -398,7 +441,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
     setState(() => _isSubmitting = true);
 
     try {
-      // Final username check right before submission
+      // Double-check if username was taken in the meantime
       final usernameSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('username', isEqualTo: username.toLowerCase())
@@ -416,11 +459,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
         return;
       }
 
-      // Format phone number with country code
       final formattedPhone =
           '+${_phoneNumber!.countryCode}${_phoneNumber!.number}';
 
-      // Update user profile
+      // Save the completed profile to Firestore
       await FirebaseFirestore.instance.collection('users').doc(email).update({
         'full_name': fullName,
         'username': username.toLowerCase(),
@@ -433,9 +475,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
 
       if (!mounted) return;
 
-      // Show success animation
+      // Play animation and show success snackbar
       _animationController.forward();
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 3),
@@ -461,12 +502,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
 
       if (!mounted) return;
 
+      // Navigate to email verification screen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
             builder: (_) => EmailVerificationScreen(email: email)),
       );
     } on FirebaseException catch (e) {
+      // Handle known Firebase errors
       String errorMessage = "failed_to_update_profile".tr();
       if (e.code == 'permission-denied') {
         errorMessage = "permission_denied".tr();
@@ -477,6 +520,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen>
         SnackBar(content: Text(errorMessage)),
       );
     } catch (e) {
+      // Fallback for unknown errors
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("unexpected_error".tr())),
       );

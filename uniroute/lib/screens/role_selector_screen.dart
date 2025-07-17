@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 import 'student_login_screen.dart';
 import 'driver_login_screen.dart';
 
@@ -15,6 +16,9 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
     with SingleTickerProviderStateMixin {
   String? _selectedRole;
   bool _languageSelected = false;
+  bool _isLoading = false;
+  bool _isNavigating = false;
+
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
 
@@ -22,6 +26,7 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
   void initState() {
     super.initState();
     _initLanguageCheck();
+    _loadSelectedRole();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -57,32 +62,61 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
     await context.setLocale(locale);
     setState(() => _languageSelected = true);
     await _animationController.reverse(); // Slide down
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          locale.languageCode == 'tr'
+              ? 'Dil Türkçe olarak ayarlandı'
+              : 'Language set to English',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _selectRole(String role) {
+    HapticFeedback.selectionClick();
     setState(() {
       _selectedRole = role;
     });
   }
 
+  Future<void> _loadSelectedRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedRole = prefs.getString('userRole');
+    if (savedRole != null) {
+      setState(() => _selectedRole = savedRole);
+    }
+  }
+
   Future<void> _saveRoleAndContinue() async {
-    if (_selectedRole == null) return;
+    if (_selectedRole == null || _isNavigating) return;
+
+    setState(() {
+      _isNavigating = true;
+      _isLoading = true;
+    });
+
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('userRole', _selectedRole!);
 
     if (!mounted) return;
 
-    if (_selectedRole == 'student') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const StudentLoginScreen()),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const DriverLoginScreen()),
-      );
-    }
+    Widget screen = _selectedRole == 'student'
+        ? const StudentLoginScreen()
+        : const DriverLoginScreen();
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _isNavigating = false;
+    });
   }
 
   Widget _roleButton(String label, IconData icon, String role) {
@@ -140,11 +174,17 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 40),
-                  Image.asset('assets/images/bus_logo.png', width: 200,
+                  Semantics(
+                    label: 'Bus app logo',
+                    child: Image.asset(
+                      'assets/images/bus_logo.png',
+                      width: 200,
                       errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.directions_bus,
-                        size: 200, color: Colors.grey);
-                  }),
+                        return const Icon(Icons.directions_bus,
+                            size: 200, color: Colors.grey);
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 60),
                   _roleButton('student', Icons.school, 'student'),
                   const SizedBox(height: 20),
@@ -155,8 +195,9 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed:
-                          _selectedRole == null ? null : _saveRoleAndContinue,
+                      onPressed: _selectedRole == null || _isLoading
+                          ? null
+                          : _saveRoleAndContinue,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -164,10 +205,18 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: Text(
-                        "continue".tr(),
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            )
+                          : Text(
+                              "continue".tr(),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.white, // ✅ white text color
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -198,9 +247,9 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            'Language / Dil',
-                            style: TextStyle(
+                          Text(
+                            'select_language'.tr(),
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),

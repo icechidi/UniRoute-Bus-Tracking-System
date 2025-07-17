@@ -1,14 +1,19 @@
+// Flutter & Dart imports
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:easy_localization/easy_localization.dart';
+
 import 'success_screen.dart';
 
+/// Screen responsible for email verification via OTP sent using EmailJS.
+/// Code is stored in Firestore for secure verification and expires in 15 minutes.
 class EmailVerificationScreen extends StatefulWidget {
-  final String email;
+  final String email; // Email address of the user to verify
 
   const EmailVerificationScreen({super.key, required this.email});
 
@@ -18,38 +23,43 @@ class EmailVerificationScreen extends StatefulWidget {
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
+  // Text controller for 6-digit code input
   final TextEditingController _codeController = TextEditingController();
-  bool _isSending = false;
-  bool _isVerifying = false;
-  bool _canResend = false;
+
+  // UI state tracking flags
+  bool _isSending = false; // Tracks whether email is being sent
+  bool _isVerifying = false; // Tracks whether code is being verified
+  bool _canResend = false; // Tracks whether resend is currently allowed
+
+  // Timer for resend cooldown management
   Timer? _resendCooldownTimer;
-  int _resendCooldownSeconds = 60;
+  int _resendCooldownSeconds = 60; // Time (in seconds) before resend allowed
 
   @override
   void initState() {
     super.initState();
-    _sendVerificationCode();
+    _sendVerificationCode(); // Automatically send code when screen is opened
   }
 
   @override
   void dispose() {
-    _resendCooldownTimer?.cancel();
-    _codeController.dispose();
+    _resendCooldownTimer?.cancel(); // Stop timer to prevent leaks
+    _codeController.dispose(); // Dispose controller
     super.dispose();
   }
 
-  /// 🔢 Generate random 6-digit code
+  /// Generates a random 6-digit OTP as a string
   String _generateCode() {
     final random = Random();
-    return (100000 + random.nextInt(900000)).toString();
+    return (100000 + random.nextInt(900000)).toString(); // Range: 100000–999999
   }
 
-  /// 🕒 Format readable expiration
+  /// Formats expiry time into a human-readable string (e.g., 02:15 PM)
   String _formatExpiryTime(DateTime expiryTime) {
     return DateFormat('hh:mm a').format(expiryTime);
   }
 
-  /// 🌀 Start cooldown after sending
+  /// Starts a 60-second cooldown for the resend button
   void _startResendCooldown() {
     _resendCooldownTimer?.cancel();
     setState(() {
@@ -57,21 +67,18 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       _canResend = false;
     });
 
+    // Countdown logic
     _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_resendCooldownSeconds <= 1) {
         timer.cancel();
-        setState(() {
-          _canResend = true;
-        });
+        setState(() => _canResend = true);
       } else {
-        setState(() {
-          _resendCooldownSeconds--;
-        });
+        setState(() => _resendCooldownSeconds--);
       }
     });
   }
 
-  /// 📧 Send OTP via EmailJS and store in Firestore
+  /// Sends OTP code via EmailJS and stores code + expiry in Firestore
   Future<void> _sendVerificationCode() async {
     setState(() {
       _isSending = true;
@@ -82,7 +89,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     final expiry = DateTime.now().add(const Duration(minutes: 15));
 
     try {
-      // 🔄 Save OTP in Firestore (overwrites existing)
+      // Store code with expiration in Firestore
       await FirebaseFirestore.instance
           .collection('verifications')
           .doc(widget.email)
@@ -92,7 +99,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         'expiresAt': expiry.toIso8601String(),
       });
 
-      // 📤 Send via EmailJS
+      // Send email using EmailJS service
       final emailSent = await _sendEmailJs(
         email: widget.email,
         code: code,
@@ -113,9 +120,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     setState(() => _isSending = false);
   }
 
-  /// ✅ Verify the code
+  /// Verifies the entered OTP code against Firestore and updates user status
   Future<void> _verifyCode() async {
     setState(() => _isVerifying = true);
+
     final inputCode = _codeController.text.trim();
 
     try {
@@ -132,20 +140,21 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       final storedCode = doc['code'];
       final expiresAt = DateTime.parse(doc['expiresAt']);
 
+      // Check if code is expired
       if (DateTime.now().isAfter(expiresAt)) {
         await doc.reference.delete();
         _showError("code_expired".tr());
         return;
       }
 
+      // Code is correct
       if (storedCode == inputCode) {
-        // 🎉 Verified!
         await FirebaseFirestore.instance
             .collection('users')
             .doc(widget.email)
-            .update({'status': 'verified'});
+            .update({'status': 'verified'}); // Mark user as verified
 
-        await doc.reference.delete();
+        await doc.reference.delete(); // Cleanup OTP record
 
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -163,27 +172,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     setState(() => _isVerifying = false);
   }
 
-  /// 🔵 Styled info message
-  void _showInfo(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.blueAccent,
-      ),
-    );
-  }
-
-  /// 🔴 Styled error message
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.redAccent,
-      ),
-    );
-  }
-
-  /// 🌐 Send email using EmailJS API
+  /// Sends a POST request to EmailJS with OTP content
   Future<bool> _sendEmailJs({
     required String email,
     required String code,
@@ -194,6 +183,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     const userId = '3MEjIrwOktOaswsrX';
 
     final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
+
     final response = await http.post(
       url,
       headers: {
@@ -215,6 +205,27 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     return response.statusCode == 200;
   }
 
+  /// Shows an info SnackBar (blue)
+  void _showInfo(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blueAccent,
+      ),
+    );
+  }
+
+  /// Shows an error SnackBar (red)
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
+  }
+
+  /// Builds the main UI for email verification
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -228,6 +239,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               children: [
                 const Icon(Icons.email, size: 60, color: Colors.black87),
                 const SizedBox(height: 20),
+
+                // Instructional text
                 Text(
                   "check_email_instruction".tr(),
                   style: const TextStyle(
@@ -238,6 +251,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
+
+                // OTP input field
                 TextField(
                   controller: _codeController,
                   keyboardType: TextInputType.number,
@@ -249,6 +264,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Verify button
                 ElevatedButton(
                   onPressed: _isVerifying ? null : _verifyCode,
                   style: ElevatedButton.styleFrom(
@@ -265,6 +282,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       : Text("verify".tr()),
                 ),
                 const SizedBox(height: 20),
+
+                // Resend button with countdown
                 ElevatedButton.icon(
                   onPressed: _canResend ? _sendVerificationCode : null,
                   icon: const Icon(Icons.refresh),
