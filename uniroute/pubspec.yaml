@@ -36,6 +36,7 @@ dependencies:
   # 🌐 Localization
   easy_localization: ^3.0.1
   intl: 0.20.2  # Required by easy_localization for formatting
+  http: 1.4.0
 
   # 🎨 Animations & Styling
   lottie: ^3.1.0  # Success animation
@@ -57,4 +58,4 @@ flutter:
   assets:
     - assets/images/  # App logo
     - assets/lang/                # Localization files: en.json, tr.json
-    - assets/lottie/              # Success animation: success.json
+    - assets/animations/              # Success animation: success.json

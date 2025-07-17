@@ -52,5 +52,13 @@
   "google_signin_error": "Google Sign-In failed. Please try again.",
   "google_signin_failed": "Google Sign-In failed. Please try again.",
   "error": "Error",
-  "success": "Success"
+  "success": "Success",
+  "username_too_short": "Username is too short. Minimum 3 characters required.",
+  "username_taken_suggestions": "That username is taken. Try one of these suggestions.",
+  "phone_too_short": "Phone number is too short. Please enter a valid number.",
+  "profile_saved": "Your profile has been saved successfully.",
+  "enter_code": "Enter the code sent to your email",
+  "verify": "Verify",
+  "verification_code_sent": "Verification code has been sent to your email.",
+  "resend_in": "Resend in {seconds}s"
 }

@@ -1,6 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:easy_localization/easy_localization.dart';
 import 'success_screen.dart';
 
@@ -19,7 +22,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   bool _isSending = false;
   bool _isVerifying = false;
   bool _canResend = false;
-  String? _generatedCode;
+  Timer? _resendCooldownTimer;
+  int _resendCooldownSeconds = 60;
 
   @override
   void initState() {
@@ -27,12 +31,47 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     _sendVerificationCode();
   }
 
-  /// Generates a random 6-digit code
+  @override
+  void dispose() {
+    _resendCooldownTimer?.cancel();
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  /// 🔢 Generate random 6-digit code
   String _generateCode() {
     final random = Random();
     return (100000 + random.nextInt(900000)).toString();
   }
 
+  /// 🕒 Format readable expiration
+  String _formatExpiryTime(DateTime expiryTime) {
+    return DateFormat('hh:mm a').format(expiryTime);
+  }
+
+  /// 🌀 Start cooldown after sending
+  void _startResendCooldown() {
+    _resendCooldownTimer?.cancel();
+    setState(() {
+      _resendCooldownSeconds = 60;
+      _canResend = false;
+    });
+
+    _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_resendCooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() {
+          _canResend = true;
+        });
+      } else {
+        setState(() {
+          _resendCooldownSeconds--;
+        });
+      }
+    });
+  }
+
+  /// 📧 Send OTP via EmailJS and store in Firestore
   Future<void> _sendVerificationCode() async {
     setState(() {
       _isSending = true;
@@ -40,36 +79,43 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
 
     final code = _generateCode();
-    _generatedCode = code;
+    final expiry = DateTime.now().add(const Duration(minutes: 15));
 
     try {
-      // 🔒 Store the code in Firestore temporarily
+      // 🔄 Save OTP in Firestore (overwrites existing)
       await FirebaseFirestore.instance
           .collection('verifications')
           .doc(widget.email)
           .set({
         'code': code,
         'timestamp': FieldValue.serverTimestamp(),
+        'expiresAt': expiry.toIso8601String(),
       });
 
-      // 🔧 For now, just print it (replace with backend email sender in real use)
-      debugPrint("📧 Verification code sent to ${widget.email}: $code");
+      // 📤 Send via EmailJS
+      final emailSent = await _sendEmailJs(
+        email: widget.email,
+        code: code,
+        time: _formatExpiryTime(expiry),
+      );
 
-      await Future.delayed(
-          const Duration(seconds: 10)); // Delay before enabling resend
-      setState(() {
-        _isSending = false;
-        _canResend = true;
-      });
+      if (emailSent) {
+        _showInfo("verification_code_sent".tr());
+        _startResendCooldown();
+      } else {
+        _showError("email_send_failed".tr());
+      }
     } catch (e) {
-      debugPrint("❌ Failed to send code: $e");
-      setState(() => _isSending = false);
+      debugPrint("❌ Error sending code: $e");
+      _showError("send_code_failed".tr());
     }
+
+    setState(() => _isSending = false);
   }
 
+  /// ✅ Verify the code
   Future<void> _verifyCode() async {
     setState(() => _isVerifying = true);
-
     final inputCode = _codeController.text.trim();
 
     try {
@@ -78,18 +124,28 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           .doc(widget.email)
           .get();
 
-      if (doc.exists && doc['code'] == inputCode) {
-        // ✅ Update user's status as verified
+      if (!doc.exists) {
+        _showError("code_expired_or_invalid".tr());
+        return;
+      }
+
+      final storedCode = doc['code'];
+      final expiresAt = DateTime.parse(doc['expiresAt']);
+
+      if (DateTime.now().isAfter(expiresAt)) {
+        await doc.reference.delete();
+        _showError("code_expired".tr());
+        return;
+      }
+
+      if (storedCode == inputCode) {
+        // 🎉 Verified!
         await FirebaseFirestore.instance
             .collection('users')
             .doc(widget.email)
             .update({'status': 'verified'});
 
-        // ❌ Optionally delete the code after success
-        await FirebaseFirestore.instance
-            .collection('verifications')
-            .doc(widget.email)
-            .delete();
+        await doc.reference.delete();
 
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -107,16 +163,56 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     setState(() => _isVerifying = false);
   }
 
-  void _showError(String message) {
+  /// 🔵 Styled info message
+  void _showInfo(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blueAccent,
+      ),
     );
   }
 
-  @override
-  void dispose() {
-    _codeController.dispose();
-    super.dispose();
+  /// 🔴 Styled error message
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
+  }
+
+  /// 🌐 Send email using EmailJS API
+  Future<bool> _sendEmailJs({
+    required String email,
+    required String code,
+    required String time,
+  }) async {
+    const serviceId = 'service_7vpri2c';
+    const templateId = 'template_jfu83ld';
+    const userId = '3MEjIrwOktOaswsrX';
+
+    final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
+    final response = await http.post(
+      url,
+      headers: {
+        'origin': 'http://localhost',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'service_id': serviceId,
+        'template_id': templateId,
+        'user_id': userId,
+        'template_params': {
+          'user_email': email,
+          'passcode': code,
+          'time': time,
+        },
+      }),
+    );
+
+    return response.statusCode == 200;
   }
 
   @override
@@ -172,9 +268,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 ElevatedButton.icon(
                   onPressed: _canResend ? _sendVerificationCode : null,
                   icon: const Icon(Icons.refresh),
-                  label: _isSending
-                      ? const Text("Sending...")
-                      : Text("resend_email".tr()),
+                  label: Text(_isSending
+                      ? "Sending..."
+                      : _canResend
+                          ? "resend_email".tr()
+                          : "resend_in"
+                              .tr(args: [_resendCooldownSeconds.toString()])),
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
                         _canResend ? Colors.black : Colors.grey[400],
