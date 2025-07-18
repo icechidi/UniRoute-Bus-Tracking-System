@@ -73,4 +73,5 @@ class DefaultFirebaseOptions {
     iosClientId: '87170443990-7olu0p0hs5ksqnd4ufknfa958sofatmn.apps.googleusercontent.com',
     iosBundleId: 'com.example.uniroute',
   );
+
 }

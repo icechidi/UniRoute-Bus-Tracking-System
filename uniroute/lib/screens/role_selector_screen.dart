@@ -24,6 +24,7 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
 
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
+  late Animation<double> _opacityAnimation;
 
   @override
   void initState() {
@@ -34,14 +35,28 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
 
   void _initAnimations() {
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOutQuart,
+      ),
+    );
+
+    _opacityAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
     );
   }
 
@@ -64,31 +79,36 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
   }
 
   Future<void> _setLanguage(Locale locale) async {
-  await _prefs.setString('selected_language_code', locale.languageCode);
-  if (!mounted) return;
-  await context.setLocale(locale);
-  setState(() => _languageSelected = true);
-  await _animationController.reverse();
+    setState(() {
+      _languageSelected = true; // Immediate UI update
+    });
 
-  if (!mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        locale.languageCode == 'tr'
-            ? 'Dil Türkçe olarak ayarlandı'
-            : 'Language set to English',
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold, // Matches your student/driver text
+    await _animationController.reverse();
+
+    // Perform async operations after animation completes
+    await Future.wait([
+      _prefs.setString('selected_language_code', locale.languageCode),
+      if (mounted) context.setLocale(locale),
+    ]);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          locale.languageCode == 'tr'
+              ? 'language_set_tr'.tr()
+              : 'language_set_en'.tr(),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        duration: const Duration(seconds: 2),
       ),
-      duration: const Duration(seconds: 2),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
-    ),
-  );
-}
+    );
+  }
 
   void _selectRole(String role) {
     HapticFeedback.selectionClick();
@@ -124,7 +144,9 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 25),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.black.withAlpha((0.05 * 255).toInt()) : Colors.white,
+          color: isSelected
+              ? Colors.black.withAlpha((0.05 * 255).toInt())
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: isSelected
               ? Border.all(color: Colors.black, width: 2)
@@ -151,6 +173,35 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
             const SizedBox(width: 10),
             Icon(icon, color: isSelected ? Colors.black : Colors.black87),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLanguageOption(String flag, String language, Locale locale) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _setLanguage(locale),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Row(
+            children: [
+              Text(
+                flag,
+                style: const TextStyle(fontSize: 28),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                language.tr(),
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -185,7 +236,8 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                     ),
                   ),
                   const SizedBox(height: 60),
-                  _buildRoleButton('student', LucideIcons.graduationCap, 'student'),
+                  _buildRoleButton(
+                      'student', LucideIcons.graduationCap, 'student'),
                   const SizedBox(height: 20),
                   const Divider(thickness: 1),
                   const SizedBox(height: 20),
@@ -230,38 +282,40 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                   alignment: Alignment.bottomCenter,
                   child: SlideTransition(
                     position: _slideAnimation,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 24, horizontal: 16),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(24),
-                          topRight: Radius.circular(24),
+                    child: FadeTransition(
+                      opacity: _opacityAnimation,
+                      child: Container(
+                        padding: const EdgeInsets.only(
+                          top: 24,
+                          left: 16,
+                          right: 16,
+                          bottom: 32,
                         ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'select_language'.tr(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(24),
+                            topRight: Radius.circular(24),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'select_language'.tr(),
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          ListTile(
-                            leading: const Text("🇹🇷", style: TextStyle(fontSize: 24)),
-                            title: Text('turkish'.tr(), style: GoogleFonts.poppins()),
-                            onTap: () => _setLanguage(const Locale('tr')),
-                          ),
-                          ListTile(
-                            leading: const Text("🇬🇧", style: TextStyle(fontSize: 24)),
-                            title: Text('english'.tr(), style: GoogleFonts.poppins()),
-                            onTap: () => _setLanguage(const Locale('en')),
-                          ),
-                        ],
+                            const SizedBox(height: 24),
+                            _buildLanguageOption(
+                                '🇹🇷', 'turkish', const Locale('tr')),
+                            const Divider(height: 1, thickness: 1),
+                            _buildLanguageOption(
+                                '🇬🇧', 'english', const Locale('en')),
+                          ],
+                        ),
                       ),
                     ),
                   ),

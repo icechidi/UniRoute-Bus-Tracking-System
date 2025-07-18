@@ -1,148 +1,184 @@
-// Flutter & Dart imports
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../widgets/common_widgets.dart';
+import 'complete_profile_screen.dart';
 
-import 'success_screen.dart';
-
-/// Screen responsible for verifying email using Firebase Auth built-in flow.
 class EmailVerificationScreen extends StatefulWidget {
-  final String email; // Email address of the user to verify
+  final String email;
 
   const EmailVerificationScreen({super.key, required this.email});
 
   @override
-  State<EmailVerificationScreen> createState() => _EmailVerificationScreenState();
+  State<EmailVerificationScreen> createState() =>
+      _EmailVerificationScreenState();
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
-  Timer? _emailCheckTimer;
-  bool _canResend = false;
-  int _resendCooldownSeconds = 60;
-  Timer? _resendCooldownTimer;
+  Timer? _verificationTimer;
+  bool _isLoading = false;
+  int _resendCooldown = 60;
+  Timer? _cooldownTimer;
 
   @override
   void initState() {
     super.initState();
-    _sendFirebaseVerification();
-    _startEmailVerificationCheck();
+    _sendVerificationEmail(forceSend: true);
+    _startVerificationCheck();
   }
 
   @override
   void dispose() {
-    _emailCheckTimer?.cancel();
-    _resendCooldownTimer?.cancel();
+    _verificationTimer?.cancel();
+    _cooldownTimer?.cancel();
     super.dispose();
   }
 
-  /// Sends verification email via Firebase Auth
-  Future<void> _sendFirebaseVerification() async {
-    final user = FirebaseAuth.instance.currentUser;
+  /// Send verification email regardless of emailVerified status (forceSend = true)
+  Future<void> _sendVerificationEmail({bool forceSend = false}) async {
+    setState(() {
+      _isLoading = true;
+      _resendCooldown = 60;
+    });
 
-    if (user != null && !user.emailVerified) {
-      setState(() => _canResend = false);
-      await user.sendEmailVerification();
-      _showInfo("verification_code_sent".tr());
-      _startResendCooldown();
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // Always send email if forced OR if not verified yet
+        if (forceSend || !user.emailVerified) {
+          await user.sendEmailVerification();
+          _startCooldownTimer();
+        }
+      }
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
-  /// Continuously checks if the user's email has been verified
-  void _startEmailVerificationCheck() {
-    _emailCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      final user = FirebaseAuth.instance.currentUser;
-      await user?.reload();
-      if (user != null && user.emailVerified) {
-        timer.cancel();
-        FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.email)
-            .update({'status': 'verified'});
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const SuccessScreen()),
-        );
-      }
-    });
-  }
-
-  void _startResendCooldown() {
-    _resendCooldownTimer?.cancel();
-    setState(() {
-      _resendCooldownSeconds = 60;
-      _canResend = false;
-    });
-
-    _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_resendCooldownSeconds <= 1) {
-        timer.cancel();
-        setState(() => _canResend = true);
-      } else {
-        setState(() => _resendCooldownSeconds--);
-      }
-    });
-  }
-
-  void _showInfo(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.blueAccent,
-      ),
+  void _startVerificationCheck() {
+    _verificationTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (timer) => _checkVerificationStatus(),
     );
   }
 
-  /// Builds the main UI for email verification
+  Future<void> _checkVerificationStatus() async {
+    try {
+      await FirebaseAuth.instance.currentUser?.reload();
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user?.emailVerified ?? false) {
+        _verificationTimer?.cancel();
+
+        final email = user?.email;
+        if (email != null) {
+          // ✅ Update Firestore email_status to "verified"
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(email)
+              .update({'email_status': 'verified'});
+        }
+
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const CompleteProfileScreen(),
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Ignore silently
+    }
+  }
+
+  void _startCooldownTimer() {
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (timer) {
+        if (_resendCooldown <= 0) {
+          timer.cancel();
+        } else {
+          setState(() => _resendCooldown--);
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.email, size: 60, color: Colors.black87),
-                const SizedBox(height: 20),
-
-                Text(
-                  "check_email_instruction".tr(),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-
-                ElevatedButton(
-                  onPressed: _canResend ? _sendFirebaseVerification : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _canResend ? Colors.black : Colors.grey[400],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    _canResend
-                        ? "resend_email".tr()
-                        : "resend_in".tr(args: [_resendCooldownSeconds.toString()]),
-                  ),
-                ),
-              ],
+    return AuthScaffold(
+      title: "verify_email".tr(),
+      subtitle: "verification_sent_to".tr(),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          const Icon(
+            Icons.mark_email_read_outlined,
+            size: 80,
+            color: Colors.black87,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            widget.email,
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
             ),
           ),
-        ),
+          const SizedBox(height: 32),
+          Text(
+            "check_inbox_instructions".tr(),
+            style: GoogleFonts.poppins(),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 40),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _resendCooldown > 0 || _isLoading
+                  ? null
+                  : () => _sendVerificationEmail(forceSend: true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _isLoading
+                  ? const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    )
+                  : Text(
+                      _resendCooldown > 0
+                          ? "resend_in_seconds"
+                              .tr(args: [_resendCooldown.toString()])
+                          : "resend_email".tr(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "use_different_email".tr(),
+              style: GoogleFonts.poppins(
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

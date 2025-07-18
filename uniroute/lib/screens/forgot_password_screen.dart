@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/common_widgets.dart'; // Assuming this contains buildInputDecoration()
@@ -36,6 +37,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _isLoading = true);
     try {
+      // Check if account exists in Firestore
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(email).get();
+      if (!doc.exists) {
+        _showDialog("no_account_found"
+            .tr()); // Make sure to add this key in your localization
+        return;
+      }
+
+      // Send reset email
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       _showDialog("reset_link_sent".tr());
     } on FirebaseAuthException catch (e) {
