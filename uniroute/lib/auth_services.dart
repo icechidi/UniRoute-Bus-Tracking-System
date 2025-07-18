@@ -1,9 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart'; // Updated package
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthServices {
   // Constants
@@ -34,34 +34,46 @@ class AuthServices {
       final UserCredential userCredential =
           await FirebaseAuth.instance.signInWithCredential(credential);
 
-      await FirebaseFirestore.instance.enableNetwork();
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      final userEmail = userCredential.user?.email;
-      if (userEmail != null) {
-        final prefs = await SharedPreferences.getInstance();
-        final userDoc = await FirebaseFirestore.instance
-            .collection(_userCollection)
-            .doc(userEmail)
-            .get();
-
-        if (userDoc.exists && userDoc.data()!.containsKey('role')) {
-          prefs.setString(_userRoleKey, userDoc['role']);
-        } else {
-          await FirebaseFirestore.instance
-              .collection(_userCollection)
-              .doc(userEmail)
-              .set({
-            'email': userEmail,
-            'role': _defaultRole,
-          });
-          prefs.setString(_userRoleKey, _defaultRole);
-        }
-      }
-
+      await _handlePostSignIn(userCredential.user?.email);
       return userCredential;
     } catch (e) {
       debugPrint("Google sign-in error: $e");
+      return null;
+    }
+  }
+
+  // Apple Sign-In
+  static Future<UserCredential?> signInWithApple() async {
+    try {
+      // 1. Perform the sign-in request
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+
+      // 2. Create Firebase credential
+      final oauthCredential = OAuthProvider("apple.com").credential(
+        idToken: credential.identityToken,
+        accessToken: credential.authorizationCode,
+      );
+
+      // 3. Sign in to Firebase
+      final UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+
+      // 4. Update display name if available (only provided on first login)
+      if (credential.givenName != null && credential.familyName != null) {
+        await userCredential.user?.updateDisplayName(
+          '${credential.givenName} ${credential.familyName}',
+        );
+      }
+
+      await _handlePostSignIn(userCredential.user?.email);
+      return userCredential;
+    } catch (e) {
+      debugPrint("Apple sign-in error: $e");
       return null;
     }
   }
@@ -72,24 +84,38 @@ class AuthServices {
     try {
       final UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
-
-      await FirebaseFirestore.instance.enableNetwork();
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection(_userCollection)
-          .doc(email)
-          .get();
-
-      if (userDoc.exists && userDoc.data()!.containsKey('role')) {
-        final prefs = await SharedPreferences.getInstance();
-        prefs.setString(_userRoleKey, userDoc['role']);
-      }
-
+      await _handlePostSignIn(email);
       return userCredential;
     } catch (e) {
       debugPrint("Email login error: $e");
       return null;
+    }
+  }
+
+  // Shared post-sign-in logic
+  static Future<void> _handlePostSignIn(String? email) async {
+    if (email == null) return;
+
+    await FirebaseFirestore.instance.enableNetwork();
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final prefs = await SharedPreferences.getInstance();
+    final userDoc = await FirebaseFirestore.instance
+        .collection(_userCollection)
+        .doc(email)
+        .get();
+
+    if (userDoc.exists && userDoc.data()!.containsKey('role')) {
+      prefs.setString(_userRoleKey, userDoc['role']);
+    } else {
+      await FirebaseFirestore.instance
+          .collection(_userCollection)
+          .doc(email)
+          .set({
+        'email': email,
+        'role': _defaultRole,
+      });
+      prefs.setString(_userRoleKey, _defaultRole);
     }
   }
 
@@ -98,6 +124,7 @@ class AuthServices {
     try {
       await FirebaseAuth.instance.signOut();
       await GoogleSignIn().signOut();
+      // No need to sign out from Apple as it's one-time per session
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_userRoleKey);

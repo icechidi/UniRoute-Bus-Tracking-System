@@ -1,17 +1,15 @@
-// Required Flutter, Firebase, and third-party packages
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter_signin_button/flutter_signin_button.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 
-/// A screen for user account creation via email/password or Google sign-in.
+import '../auth_services.dart';
+import '../widgets/common_widgets.dart';
+import 'complete_profile_screen.dart';
+
 class CreateAccountScreen extends StatefulWidget {
   const CreateAccountScreen({super.key});
 
@@ -19,35 +17,28 @@ class CreateAccountScreen extends StatefulWidget {
   State<CreateAccountScreen> createState() => _CreateAccountScreenState();
 }
 
-class _CreateAccountScreenState extends State<CreateAccountScreen>
-    with SingleTickerProviderStateMixin {
-  // Controllers for form fields
+class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-
-  // UI state flags
+  
   bool _isLoading = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
-  bool _success = false;
+  DateTime? _lastAttemptTime;
+  int _attemptCount = 0;
 
-  // Animation for error/success dialogs
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
+  // Error states
+  String? _emailError;
+  String? _passwordError;
+  String? _confirmPasswordError;
 
   @override
   void initState() {
     super.initState();
-    // Setup animation controller
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    );
+    _passwordController.addListener(_validatePassword);
+    _confirmPasswordController.addListener(_validateConfirmPassword);
+    _emailController.addListener(_validateEmail);
   }
 
   @override
@@ -55,51 +46,99 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _animationController.dispose();
     super.dispose();
   }
 
-  /// Validates input and creates a new user account via Firebase Auth.
+  bool get _isFormValid {
+    return _emailError == null && 
+           _passwordError == null && 
+           _confirmPasswordError == null &&
+           _emailController.text.isNotEmpty &&
+           _passwordController.text.isNotEmpty &&
+           _confirmPasswordController.text.isNotEmpty;
+  }
+
+  void _validateEmail() {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _emailError = null);
+      return;
+    }
+
+    if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email)) {
+      setState(() => _emailError = "invalid_email".tr());
+    } else {
+      setState(() => _emailError = null);
+    }
+  }
+
+  void _validatePassword() {
+    final password = _passwordController.text.trim();
+    if (password.isEmpty) {
+      setState(() => _passwordError = null);
+      return;
+    }
+
+    if (!_isPasswordStrong(password)) {
+      setState(() => _passwordError = "weak_password".tr());
+    } else {
+      setState(() => _passwordError = null);
+    }
+
+    // Also validate confirm password when password changes
+    _validateConfirmPassword();
+  }
+
+  void _validateConfirmPassword() {
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+    
+    if (confirmPassword.isEmpty) {
+      setState(() => _confirmPasswordError = null);
+      return;
+    }
+
+    if (password != confirmPassword) {
+      setState(() => _confirmPasswordError = "passwords_do_not_match".tr());
+    } else {
+      setState(() => _confirmPasswordError = null);
+    }
+  }
+
   Future<void> _createAccount() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
-    final confirm = _confirmPasswordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
 
-    // Regex for input validation
-    final emailRegex = RegExp(r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$");
-    final passwordRegex =
-        RegExp(r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#\$&*~]).{6,}$');
-
-    // Input validation
-    if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
-      _showErrorDialog("fields_required".tr());
-      return;
+    // Rate limiting
+    final now = DateTime.now();
+    if (_lastAttemptTime != null && 
+        now.difference(_lastAttemptTime!) < const Duration(minutes: 1)) {
+      _attemptCount++;
+      if (_attemptCount >= 5) {
+        _showDialog("too_many_attempts".tr());
+        return;
+      }
+    } else {
+      _attemptCount = 1;
     }
-    if (!emailRegex.hasMatch(email)) {
-      _showErrorDialog("invalid_email".tr());
-      return;
-    }
-    if (!passwordRegex.hasMatch(password)) {
-      _showErrorDialog("invalid_password".tr());
-      return;
-    }
-    if (password != confirm) {
-      _showErrorDialog("passwords_do_not_match".tr());
-      return;
-    }
+    _lastAttemptTime = now;
 
     setState(() => _isLoading = true);
 
     try {
-      final auth = FirebaseAuth.instance;
+      // Check if email exists
+      final methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
+      if (methods.isNotEmpty) {
+        setState(() => _emailError = "email_already_used".tr());
+        return;
+      }
 
-      // Try creating user
-      final userCredential = await auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      // Create user
+      final userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
-      // Create user document in Firestore for additional info
+      // Create user document
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user?.email)
@@ -110,335 +149,382 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
         'uid': userCredential.user?.uid,
       });
 
-      // Trigger success animation
-      setState(() => _success = true);
-      _animationController.forward();
-
-      await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return;
-
-      // Navigate to complete profile screen
-      Navigator.pushReplacementNamed(context, '/additionalInfo');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
+      );
     } on FirebaseAuthException catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack);
-
-      // Localized FirebaseAuth error handling
-      String errorMessage = "signup_failed".tr();
-      if (e.code == 'email-already-in-use') {
-        errorMessage = "user_already_exists".tr();
-      } else if (e.code == 'weak-password') {
-        errorMessage = "weak_password".tr();
-      } else if (e.code == 'invalid-email') {
-        errorMessage = "invalid_email".tr();
-      }
-
-      _showErrorDialog(errorMessage);
+      _showDialog(_getErrorMessage(e));
     } catch (e, stack) {
       FirebaseCrashlytics.instance.recordError(e, stack);
-      _showErrorDialog("unexpected_error".tr());
-      debugPrint("Error during sign up: $e");
+      _showDialog("unexpected_error".tr());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Signs in the user using Google authentication.
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
+  bool _isPasswordStrong(String password) {
+    // At least 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
+    return RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+{};:,<.>]).{8,}$')
+        .hasMatch(password);
+  }
 
-    try {
-      final auth = FirebaseAuth.instance;
-      late UserCredential userCredential;
-
-      if (kIsWeb) {
-        // Google sign-in for web platforms
-        final googleProvider = GoogleAuthProvider();
-        userCredential = await auth.signInWithPopup(googleProvider);
-      } else {
-        // Google sign-in for mobile platforms
-        final googleSignIn = GoogleSignIn();
-        final googleUser = await googleSignIn.signIn();
-        if (googleUser == null) {
-          setState(() => _isLoading = false);
-          return; // Sign-in cancelled by user
-        }
-
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        userCredential = await auth.signInWithCredential(credential);
-      }
-
-      final user = userCredential.user;
-      if (user == null) throw Exception("Google sign-in failed - no user");
-
-      // Check if Firestore user document exists
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.email)
-          .get();
-
-      // Create user profile in Firestore if new
-      if (!userDoc.exists) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.email)
-            .set({
-          'email': user.email,
-          'status': 'unverified',
-          'createdAt': FieldValue.serverTimestamp(),
-          'uid': user.uid,
-        });
-
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/additionalInfo');
-        }
-      } else {
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-        }
-      }
-    } on FirebaseAuthException catch (e, stack) {
-      FirebaseCrashlytics.instance.recordError(e, stack);
-      if (e.code != 'ERROR_ABORTED_BY_USER') {
-        _showErrorDialog("google_signin_failed".tr());
-      }
-    } catch (e, stack) {
-      FirebaseCrashlytics.instance.recordError(e, stack);
-      _showErrorDialog("google_signin_failed".tr());
-      debugPrint("Google sign-in error: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+  String _getErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        return "email_already_used".tr();
+      case 'weak-password':
+        return "weak_password".tr();
+      case 'invalid-email':
+        return "invalid_email".tr();
+      case 'operation-not-allowed':
+        return "operation_not_allowed".tr();
+      default:
+        return "signup_failed".tr();
     }
   }
 
-  /// Shows a styled error dialog with animation
-  void _showErrorDialog(String message) {
+  void _showDialog(String message) {
     showDialog(
       context: context,
-      builder: (_) => ScaleTransition(
-        scale: _scaleAnimation,
-        child: AlertDialog(
-          title: Text("error".tr(),
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text("ok".tr()),
+      builder: (context) => AlertDialog(
+        title: Text("error".tr(), style: GoogleFonts.poppins()),
+        content: Text(message, style: GoogleFonts.poppins()),
+        actions: [
+          TextButton(
+            child: Text("ok".tr(), style: GoogleFonts.poppins()),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPasswordStrengthIndicator(String password) {
+    if (password.isEmpty) return const SizedBox.shrink();
+    
+    final strength = _calculatePasswordStrength(password);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LinearProgressIndicator(
+          value: strength.value,
+          backgroundColor: Colors.grey[200],
+          color: strength.color,
+          minHeight: 6,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          strength.text.tr(),
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: strength.color,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  _PasswordStrength _calculatePasswordStrength(String password) {
+    if (password.length < 8) return _PasswordStrength.weak();
+    
+    final hasUpper = password.contains(RegExp(r'[A-Z]'));
+    final hasLower = password.contains(RegExp(r'[a-z]'));
+    final hasDigit = password.contains(RegExp(r'[0-9]'));
+    final hasSpecial = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
+
+    final strength = (hasUpper ? 1 : 0) + 
+                    (hasLower ? 1 : 0) + 
+                    (hasDigit ? 1 : 0) + 
+                    (hasSpecial ? 1 : 0);
+
+    if (strength <= 2) return _PasswordStrength.weak();
+    if (strength == 3) return _PasswordStrength.medium();
+    return _PasswordStrength.strong();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthScaffold(
+      title: "create_account".tr(),
+      subtitle: "enter_email_to_signup".tr(),
+      child: Column(
+        children: [
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: buildInputDecoration('email_hint').copyWith(
+              errorText: _emailError,
+              errorStyle: GoogleFonts.poppins(fontSize: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: _emailError != null ? Colors.red : Colors.grey),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: _emailError != null ? Colors.red : Colors.black,
+                  width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: Colors.red, width: 1.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onChanged: (_) => _validateEmail(),
+          ),
+          if (_emailError != null) 
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                _emailError!,
+                style: GoogleFonts.poppins(
+                  color: Colors.red,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _passwordController,
+            obscureText: !_showPassword,
+            decoration: buildInputDecoration('password_hint').copyWith(
+              errorText: _passwordError,
+              errorStyle: GoogleFonts.poppins(fontSize: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: _passwordError != null ? Colors.red : Colors.grey),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: _passwordError != null ? Colors.red : Colors.black,
+                  width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: Colors.red, width: 1.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              suffixIcon: IconButton(
+                icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
+                onPressed: () => setState(() => _showPassword = !_showPassword),
+              ),
+            ),
+            onChanged: (_) => _validatePassword(),
+          ),
+          const SizedBox(height: 4),
+          _buildPasswordStrengthIndicator(_passwordController.text),
+          if (_passwordError != null) 
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                _passwordError!,
+                style: GoogleFonts.poppins(
+                  color: Colors.red,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _confirmPasswordController,
+            obscureText: !_showConfirmPassword,
+            decoration: buildInputDecoration('confirm_password_hint').copyWith(
+              errorText: _confirmPasswordError,
+              errorStyle: GoogleFonts.poppins(fontSize: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: _confirmPasswordError != null ? Colors.red : Colors.grey),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: _confirmPasswordError != null ? Colors.red : Colors.black,
+                  width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: Colors.red, width: 1.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              suffixIcon: IconButton(
+                icon: Icon(_showConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                onPressed: () => setState(() => _showConfirmPassword = !_showConfirmPassword),
+              ),
+            ),
+            onChanged: (_) => _validateConfirmPassword(),
+          ),
+          if (_confirmPasswordError != null) 
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                _confirmPasswordError!,
+                style: GoogleFonts.poppins(
+                  color: Colors.red,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isFormValid && !_isLoading ? _createAccount : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _isLoading
+                  ? const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    )
+                  : Text(
+                      "continue".tr(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Expanded(child: Divider(thickness: 1)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(
+                  "or".tr(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+              const Expanded(child: Divider(thickness: 1)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Google Sign-In Button
+          _buildSocialButton(
+            text: "continue_google",
+            icon: Image.asset(
+              'assets/images/google_logo.png',
+              width: 24,
+              height: 24,
+            ),
+            onPressed: () async {
+              final userCredential = await AuthServices.signInWithGoogle();
+              if (userCredential?.user != null && mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
+                );
+              }
+            },
+          ),
+          // Apple Sign-In Button (iOS only)
+          if (!kIsWeb)
+            _buildSocialButton(
+              text: "continue_apple",
+              icon: const Icon(
+                Icons.apple,
+                color: Colors.white,
+                size: 24,
+              ),
+              backgroundColor: Colors.black,
+              borderColor: Colors.black,
+              textColor: Colors.white,
+              onPressed: () async {
+                final userCredential = await AuthServices.signInWithApple();
+                if (userCredential?.user != null && mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
+                  );
+                }
+              },
+            ),
+          const SizedBox(height: 20),
+          buildTermsText(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSocialButton({
+    required String text,
+    required Widget icon,
+    required VoidCallback onPressed,
+    Color backgroundColor = Colors.white,
+    Color borderColor = Colors.grey,
+    Color textColor = Colors.black87,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor, width: 1),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            icon,
+            const SizedBox(width: 12),
+            Text(
+              text.tr(),
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                color: textColor,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
       ),
     );
-    _animationController.forward(from: 0);
   }
+}
 
-  /// UI rendering
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: [
-                const SizedBox(height: 24),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Image.asset('assets/images/bus_logo.png', height: 120),
-                const SizedBox(height: 16),
-                Text(
-                  "create_account".tr(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "enter_email_to_signup".tr(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.grey[700],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
+class _PasswordStrength {
+  final double value;
+  final Color color;
+  final String text;
 
-                // Email input
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    hintText: "Email@domain.com",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+  _PasswordStrength(this.value, this.color, this.text);
 
-                const SizedBox(height: 16),
+  factory _PasswordStrength.weak() => 
+    _PasswordStrength(0.33, Colors.red, "weak_password_strength");
 
-                // Password input
-                TextField(
-                  controller: _passwordController,
-                  obscureText: !_showPassword,
-                  decoration: InputDecoration(
-                    hintText: "Password",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _showPassword ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () =>
-                          setState(() => _showPassword = !_showPassword),
-                    ),
-                  ),
-                ),
+  factory _PasswordStrength.medium() => 
+    _PasswordStrength(0.66, Colors.orange, "medium_password_strength");
 
-                const SizedBox(height: 16),
-
-                // Confirm password input
-                TextField(
-                  controller: _confirmPasswordController,
-                  obscureText: !_showConfirmPassword,
-                  decoration: InputDecoration(
-                    hintText: "Re-type Password",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _showConfirmPassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                      onPressed: () => setState(
-                          () => _showConfirmPassword = !_showConfirmPassword),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Continue button or loading indicator
-                _isLoading
-                    ? const CircularProgressIndicator()
-                    : SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: _createAccount,
-                          child: Text(
-                            "continue".tr(),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ),
-
-                const SizedBox(height: 16),
-
-                // OR Divider
-                Row(
-                  children: [
-                    const Expanded(child: Divider(thickness: 1)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Text(
-                        "or",
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ),
-                    const Expanded(child: Divider(thickness: 1)),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Google sign-in button
-                SignInButton(
-                  Buttons.Google,
-                  text: "continue_google".tr(),
-                  onPressed: _isLoading ? () {} : _signInWithGoogle,
-                ),
-
-                const SizedBox(height: 8),
-
-                // Apple sign-in (placeholder)
-                SignInButton(
-                  Buttons.Apple,
-                  text: "continue_apple".tr(),
-                  onPressed: () {
-                    if (!_isLoading) {
-                      // Apple Sign-in not yet implemented
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Terms and privacy policy links
-                Text.rich(
-                  TextSpan(
-                    text: "By clicking continue, you agree to our ",
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    children: [
-                      TextSpan(
-                        text: "Terms of Service",
-                        style: const TextStyle(color: Colors.blue),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            Navigator.pushNamed(context, '/termsOfService');
-                          },
-                      ),
-                      const TextSpan(text: " and "),
-                      TextSpan(
-                        text: "Privacy Policy",
-                        style: const TextStyle(color: Colors.blue),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            Navigator.pushNamed(context, '/privacyPolicy');
-                          },
-                      ),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                // Success animation
-                if (_success)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 24),
-                    child: Lottie.asset(
-                      'assets/animations/success.json',
-                      width: 120,
-                      repeat: false,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  factory _PasswordStrength.strong() => 
+    _PasswordStrength(1.0, Colors.green, "strong_password_strength");
 }
