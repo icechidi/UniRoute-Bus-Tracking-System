@@ -1,14 +1,53 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import '../widgets/common_widgets.dart';
 import 'success_screen.dart';
+
+// Data model for better type safety
+class ProfileData {
+  final String firstName;
+  final String lastName;
+  final String username;
+  final String country;
+  final String studentId;
+  final String phone;
+
+  const ProfileData({
+    required this.firstName,
+    required this.lastName,
+    required this.username,
+    required this.country,
+    required this.studentId,
+    required this.phone,
+  });
+
+  bool get isValid =>
+      firstName.isNotEmpty &&
+      lastName.isNotEmpty &&
+      username.isNotEmpty &&
+      country.isNotEmpty &&
+      studentId.isNotEmpty &&
+      phone.isNotEmpty;
+}
+
+// Validation result for better error handling
+class ValidationResult {
+  final bool isValid;
+  final String? errorMessage;
+
+  const ValidationResult.valid()
+      : isValid = true,
+        errorMessage = null;
+  const ValidationResult.invalid(this.errorMessage) : isValid = false;
+}
 
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -18,293 +57,461 @@ class CompleteProfileScreen extends StatefulWidget {
 }
 
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
-  final TextEditingController _firstNameController = TextEditingController();
-  final TextEditingController _lastNameController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _countryController = TextEditingController();
-  final TextEditingController _studentIdController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
+  // Controllers
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _countryController = TextEditingController();
+  final _studentIdController = TextEditingController();
+  final _phoneController = TextEditingController();
 
+  // Form key for validation
+  final _formKey = GlobalKey<FormState>();
+
+  // State variables
   String? _phoneNumberWithCountryCode;
   bool _isSubmitting = false;
   String? _studentIdError;
+  List<String> _usernameSuggestions = [];
+  Timer? _usernameDebounce;
+  Country? _selectedCountry;
+
+  // Constants
+  static const int _studentIdLength = 8;
+  static const String _studentIdPrefix = '3';
+  static const Duration _debounceDelay = Duration(milliseconds: 500);
+  static const int _maxUsernameSuggestions = 3;
+  static const int _minUsernameLength = 3;
 
   @override
   void dispose() {
+    _disposeControllers();
+    _usernameDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _disposeControllers() {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _usernameController.dispose();
     _countryController.dispose();
     _studentIdController.dispose();
     _phoneController.dispose();
-    super.dispose();
   }
 
-  void _validateStudentId(String value) {
+  // Validation methods
+  ValidationResult _validateStudentId(String value) {
     if (value.isEmpty) {
-      setState(() => _studentIdError = null);
-      return;
+      return const ValidationResult.valid();
     }
 
-    if (value.length != 8) {
-      setState(() => _studentIdError = "student_id_must_be_8_digits".tr());
-      return;
+    if (value.length != _studentIdLength) {
+      return ValidationResult.invalid("student_id_must_be_8_digits".tr());
     }
 
-    if (!value.startsWith('3')) {
-      setState(() => _studentIdError = "student_id_must_start_with_3".tr());
-      return;
+    if (!value.startsWith(_studentIdPrefix)) {
+      return ValidationResult.invalid("student_id_must_start_with_3".tr());
     }
 
-    if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
-      setState(() => _studentIdError = "student_id_numbers_only".tr());
-      return;
+    if (!RegExp(r'^\d+$').hasMatch(value)) {
+      return ValidationResult.invalid("student_id_numbers_only".tr());
     }
 
-    setState(() => _studentIdError = null);
+    return const ValidationResult.valid();
   }
 
-  Future<void> _submitProfile() async {
-    final firstName = _firstNameController.text.trim();
-    final lastName = _lastNameController.text.trim();
-    final username = _usernameController.text.trim();
-    final country = _countryController.text.trim();
-    final studentId = _studentIdController.text.trim();
-    final phone = _phoneNumberWithCountryCode;
-    final user = FirebaseAuth.instance.currentUser;
-    final email = user?.email;
+  void _onStudentIdChanged(String value) {
+    final result = _validateStudentId(value);
+    setState(() {
+      _studentIdError = result.errorMessage;
+    });
+  }
 
-    if (user == null || email == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('user_not_logged_in'.tr())),
-      );
-      return;
+  String? _validateRequired(String? value, String fieldName) {
+    if (value == null || value.trim().isEmpty) {
+      return '$fieldName ${"is_required".tr()}';
+    }
+    return null;
+  }
+
+  String? _validateUsername(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return "username_required".tr();
+    }
+    if (value.trim().length < _minUsernameLength) {
+      return "username_min_length".tr();
+    }
+    return null;
+  }
+
+  // Profile data extraction
+  ProfileData _getProfileData() {
+    return ProfileData(
+      firstName: _firstNameController.text.trim(),
+      lastName: _lastNameController.text.trim(),
+      username: _usernameController.text.trim().toLowerCase(),
+      country: _countryController.text.trim(),
+      studentId: _studentIdController.text.trim(),
+      phone: _phoneNumberWithCountryCode ?? '',
+    );
+  }
+
+  // Username generation methods
+  List<String> _generateUsernameCandidates(
+      String base, String first, String last) {
+    final random = Random();
+    final timestamp = DateTime.now().millisecondsSinceEpoch % 1000;
+
+    return [
+      base,
+      '$base$timestamp',
+      '$first$last',
+      '$first.$last',
+      '$last$first',
+      '$base${100 + random.nextInt(900)}',
+      '$first${100 + random.nextInt(900)}',
+      '${base}_${100 + random.nextInt(900)}',
+      '$first${last.isNotEmpty ? last[0] : ''}${100 + random.nextInt(900)}',
+      '${first.isNotEmpty ? first[0] : ''}$last${100 + random.nextInt(900)}',
+    ].where((s) => s.length >= _minUsernameLength).toSet().toList();
+  }
+
+  Future<bool> _isUsernameAvailable(String username) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('username', isEqualTo: username.toLowerCase())
+          .limit(1)
+          .get();
+
+      return snapshot.docs.isEmpty;
+    } catch (e) {
+      debugPrint('Error checking username availability: $e');
+      return false;
+    }
+  }
+
+  Future<void> _generateUsernameSuggestions(String input) async {
+    if (!mounted) return;
+
+    final suggestions = <String>[];
+    final first = _firstNameController.text.trim().toLowerCase();
+    final last = _lastNameController.text.trim().toLowerCase();
+    final base = input.toLowerCase();
+
+    final candidates = _generateUsernameCandidates(base, first, last);
+
+    for (final candidate in candidates) {
+      if (suggestions.length >= _maxUsernameSuggestions) break;
+
+      if (await _isUsernameAvailable(candidate)) {
+        suggestions.add(candidate);
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _usernameSuggestions = suggestions;
+      });
+    }
+  }
+
+  void _onUsernameChanged(String value) {
+    _usernameDebounce?.cancel();
+
+    if (value.trim().length > _minUsernameLength) {
+      _usernameDebounce = Timer(_debounceDelay, () {
+        _generateUsernameSuggestions(value.trim());
+      });
+    } else {
+      setState(() {
+        _usernameSuggestions = [];
+      });
+    }
+  }
+
+  void _selectUsernameSuggestion(String suggestion) {
+    _usernameController.text = suggestion;
+    setState(() {
+      _usernameSuggestions = [];
+    });
+  }
+
+  // Authentication and user validation
+  Future<User?> _validateCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      _showErrorSnackBar('user_not_logged_in'.tr());
+      return null;
     }
 
     if (!user.emailVerified) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('email_not_verified_error'.tr())),
-      );
+      _showErrorSnackBar('email_not_verified_error'.tr());
+      return null;
+    }
+
+    return user;
+  }
+
+  // Profile submission
+  Future<void> _submitProfile() async {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    if (firstName.isEmpty ||
-        lastName.isEmpty ||
-        username.isEmpty ||
-        country.isEmpty ||
-        studentId.isEmpty ||
-        phone == null ||
-        phone.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('please_complete_all_fields'.tr())),
-      );
+    final user = await _validateCurrentUser();
+    if (user?.email == null) return;
+
+    final profileData = _getProfileData();
+    if (!profileData.isValid) {
+      _showErrorSnackBar('fields_required'.tr());
       return;
     }
 
-    // Re-validate student ID in case it wasn't caught by onChanged
-    _validateStudentId(studentId);
-    if (_studentIdError != null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_studentIdError!)),
-      );
+    final studentIdValidation = _validateStudentId(profileData.studentId);
+    if (!studentIdValidation.isValid) {
+      _showErrorSnackBar(studentIdValidation.errorMessage!);
       return;
     }
 
     setState(() => _isSubmitting = true);
 
     try {
-      final usernameSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('username', isEqualTo: username.toLowerCase())
-          .limit(1)
-          .get();
-
-      if (usernameSnapshot.docs.isNotEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('username_already_taken'.tr())),
-        );
-        setState(() => _isSubmitting = false);
+      // Check username availability one final time
+      if (!await _isUsernameAvailable(profileData.username)) {
+        _showErrorSnackBar('username_taken_suggestions'.tr());
         return;
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(email).update({
-        'first_name': firstName,
-        'last_name': lastName,
-        'username': username.toLowerCase(),
-        'country': country,
-        'student_id': studentId,
-        'phone': phone,
-        'email_status': 'verified',
-        'account_status': 'complete',
-        'profile_completed_at': FieldValue.serverTimestamp(),
-      });
+      await _updateUserProfile(user!.email!, profileData);
 
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SuccessScreen()),
-      );
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const SuccessScreen()),
+        );
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('failed_to_update_profile'.tr())),
-      );
-      setState(() => _isSubmitting = false);
+      debugPrint('Error updating profile: $e');
+      _showErrorSnackBar('failed_to_update_profile'.tr());
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
+  }
+
+  Future<void> _updateUserProfile(String email, ProfileData profileData) async {
+    await FirebaseFirestore.instance.collection('users').doc(email).update({
+      'first_name': profileData.firstName,
+      'last_name': profileData.lastName,
+      'username': profileData.username,
+      'country': profileData.country,
+      'student_id': profileData.studentId,
+      'phone': profileData.phone,
+      'email_status': 'verified',
+      'account_status': 'complete',
+      'profile_completed_at': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // UI helper methods
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
+  }
+
+  void _showCountryPicker() {
+    showCountryPicker(
+      context: context,
+      showPhoneCode: false,
+      onSelect: (Country country) {
+        setState(() {
+          _selectedCountry = country;
+          _countryController.text = country.name;
+        });
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
       title: "tell_us_about_yourself".tr(),
-      subtitle: "",
-      child: Column(
-        children: [
-          // First Name
-          TextField(
+      subtitle: "complete_profile_subtitle".tr(),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildNameFields(),
+              const SizedBox(height: 16),
+              _buildUsernameField(),
+              _buildUsernameSuggestions(),
+              const SizedBox(height: 16),
+              _buildCountryField(),
+              const SizedBox(height: 16),
+              _buildStudentIdField(),
+              const SizedBox(height: 16),
+              _buildPhoneField(),
+              const SizedBox(height: 32),
+              _buildSubmitButton(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNameFields() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextFormField(
             controller: _firstNameController,
             decoration: buildInputDecoration('first_name'.tr()),
             textCapitalization: TextCapitalization.words,
+            validator: (value) => _validateRequired(value, 'first_name'.tr()),
+            enabled: !_isSubmitting,
           ),
-          const SizedBox(height: 16),
-
-          // Last Name
-          TextField(
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: TextFormField(
             controller: _lastNameController,
             decoration: buildInputDecoration('last_name'.tr()),
             textCapitalization: TextCapitalization.words,
+            validator: (value) => _validateRequired(value, 'last_name'.tr()),
+            enabled: !_isSubmitting,
           ),
-          const SizedBox(height: 16),
+        ),
+      ],
+    );
+  }
 
-          // Username
-          TextField(
-            controller: _usernameController,
-            decoration: buildInputDecoration('username'.tr()),
+  Widget _buildUsernameField() {
+    return TextFormField(
+      controller: _usernameController,
+      decoration: buildInputDecoration('username'.tr()).copyWith(),
+      validator: _validateUsername,
+      onChanged: _onUsernameChanged,
+      enabled: !_isSubmitting,
+    );
+  }
+
+  Widget _buildUsernameSuggestions() {
+    if (_usernameSuggestions.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Text(
+          'username_suggestions'.tr(),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: _usernameSuggestions.map((suggestion) {
+            return ActionChip(
+              label: Text(suggestion),
+              onPressed: () => _selectUsernameSuggestion(suggestion),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCountryField() {
+    return TextFormField(
+      controller: _countryController,
+      decoration: buildInputDecoration('country'.tr()).copyWith(
+        suffixIcon: const Icon(Icons.arrow_drop_down),
+      ),
+      readOnly: true,
+      onTap: _showCountryPicker,
+      validator: (value) => _validateRequired(value, 'country'.tr()),
+      enabled: !_isSubmitting,
+    );
+  }
+
+  Widget _buildStudentIdField() {
+    return TextFormField(
+      controller: _studentIdController,
+      decoration: buildInputDecoration('student_id'.tr()).copyWith(
+        errorText: _studentIdError,
+      ),
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(_studentIdLength),
+      ],
+      onChanged: _onStudentIdChanged,
+      validator: (value) {
+        final result = _validateStudentId(value ?? '');
+        return result.isValid ? null : result.errorMessage;
+      },
+      enabled: !_isSubmitting,
+    );
+  }
+
+  Widget _buildPhoneField() {
+    return IntlPhoneField(
+      controller: _phoneController,
+      decoration: buildInputDecoration('phone_number'.tr()),
+      initialCountryCode: _selectedCountry?.countryCode ?? 'US',
+      onChanged: (phone) {
+        _phoneNumberWithCountryCode = phone.completeNumber;
+      },
+      validator: (phone) {
+        if (phone == null || phone.number.isEmpty) {
+          return 'phone_required'.tr();
+        }
+        return null;
+      },
+      enabled: !_isSubmitting,
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: ElevatedButton(
+        onPressed: _isSubmitting ? null : _submitProfile,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Colors.black, width: 1.5),
           ),
-          const SizedBox(height: 16),
-
-          // Country picker
-          GestureDetector(
-            onTap: () {
-              showCountryPicker(
-                context: context,
-                showPhoneCode: false,
-                onSelect: (country) {
-                  setState(() {
-                    _countryController.text = country.name;
-                  });
-                },
-              );
-            },
-            child: AbsorbPointer(
-              child: TextField(
-                controller: _countryController,
-                readOnly: true,
-                decoration: buildInputDecoration('country'.tr()).copyWith(
-                  suffixIcon: const Icon(Icons.arrow_drop_down),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        child: _isSubmitting
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Student ID - Removed the fixed "3" prefix
-          TextField(
-            controller: _studentIdController,
-            decoration: buildInputDecoration('student_id'.tr()).copyWith(
-              errorText: _studentIdError,
-              hintText: '3XXXXXXX', // Hint instead of prefix
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(8),
-            ],
-            onChanged: _validateStudentId,
-          ),
-          const SizedBox(height: 16),
-
-          // Phone Number
-          IntlPhoneField(
-            controller: _phoneController,
-            decoration: buildInputDecoration('phone_number'.tr()),
-            initialCountryCode: 'TR',
-            onChanged: (phone) {
-              setState(() {
-                _phoneNumberWithCountryCode = phone.completeNumber;
-              });
-              _countryController.text = phone.countryISOCode;
-            },
-          ),
-          const SizedBox(height: 32),
-
-          // Continue Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isSubmitting ? null : _submitProfile,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _isSubmitting
-                  ? const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
-                    )
-                  : Text(
-                      "continue".tr(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Terms and Privacy Policy
-          Text.rich(
-            TextSpan(
-              text: "by_clicking_continue".tr(),
-              style: const TextStyle(color: Colors.grey),
-              children: [
-                TextSpan(
-                  text: "terms_of_service".tr(),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () {
-                      // Navigate to terms of service
-                    },
-                ),
-                const TextSpan(text: " and "),
-                TextSpan(
-                  text: "privacy_policy".tr(),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () {
-                      // Navigate to privacy policy
-                    },
-                ),
-              ],
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+              )
+            : Text('complete_profile'.tr()),
       ),
     );
   }

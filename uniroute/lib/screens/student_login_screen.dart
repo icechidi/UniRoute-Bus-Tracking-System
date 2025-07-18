@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/gestures.dart';
 
 import '../utils/platform_utils.dart';
 import '../auth_services.dart';
@@ -30,6 +31,8 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   bool _isLoading = false;
 
   Future<void> _loginWithEmail() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -39,17 +42,64 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
       if (!mounted) return;
       await _handleAuthSuccess(FirebaseAuth.instance.currentUser);
     } on FirebaseAuthException catch (e) {
-      _showDialog(e.message ?? "login_failed".tr());
+      if (e.code == 'user-not-found') {
+        _showAccountNotFoundDialog();
+      } else {
+        _showErrorDialog(e.message ?? "login_failed".tr());
+      }
     } catch (e) {
-      _showDialog("login_failed".tr());
+      _showErrorDialog("login_failed".tr());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  void _showAccountNotFoundDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          "account_not_found".tr(),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "no_account_exists".tr(),
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "cancel".tr(),
+              style: GoogleFonts.poppins(color: Colors.grey),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CreateAccountScreen(),
+                ),
+              );
+            },
+            child: Text(
+              "create_account".tr(),
+              style: GoogleFonts.poppins(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleAuthSuccess(User? user) async {
     if (!mounted || user == null || user.email == null) {
-      _showDialog("account_not_found".tr());
+      _showErrorDialog("account_not_found".tr());
       return;
     }
 
@@ -60,25 +110,15 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           .get();
 
       if (!doc.exists) {
-        print("User doc does NOT exist for email: ${user.email}");
-        // No account doc → must create account
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const CreateAccountScreen()),
-        );
+        _showAccountNotFoundDialog();
         return;
       }
 
       final data = doc.data() ?? {};
-      print('User doc data: $data');
-
       final emailStatus = (data['email_status'] ?? '').toString().toLowerCase();
       final accountStatus =
           (data['account_status'] ?? '').toString().toLowerCase();
 
-      print('email_status: $emailStatus, account_status: $accountStatus');
-
-      // If email_status missing or empty, treat as unverified (force verification)
       if (emailStatus.isEmpty || emailStatus == 'unverified') {
         Navigator.pushReplacement(
           context,
@@ -89,7 +129,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         return;
       }
 
-      // If account_status missing or empty, treat as incomplete (force profile completion)
       if (accountStatus.isEmpty || accountStatus == 'incomplete') {
         Navigator.pushReplacement(
           context,
@@ -98,7 +137,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         return;
       }
 
-      // If email_status verified and account_status complete proceed
       if (emailStatus == 'verified' && accountStatus == 'complete') {
         Navigator.pushReplacement(
           context,
@@ -107,27 +145,28 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         return;
       }
 
-      // For any other unknown cases fallback to create account (safe fallback)
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const CreateAccountScreen()),
       );
-    } catch (e, stack) {
-      print('Error in _handleAuthSuccess: $e\n$stack');
-      _showDialog("login_failed".tr());
+    } catch (e) {
+      _showErrorDialog("login_failed".tr());
     }
   }
 
-  void _showDialog(String message) {
+  void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("login_failed".tr(), style: GoogleFonts.poppins()),
+        title: Text(
+          "error".tr(),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         content: Text(message, style: GoogleFonts.poppins()),
         actions: [
           TextButton(
-            child: Text("ok".tr(), style: GoogleFonts.poppins()),
             onPressed: () => Navigator.pop(context),
+            child: Text("ok".tr(), style: GoogleFonts.poppins()),
           ),
         ],
       ),
@@ -174,6 +213,47 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     );
   }
 
+  Widget buildTermsText(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Text.rich(
+        TextSpan(
+          text: "by_clicking_continue".tr(),
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+          children: [
+            TextSpan(
+              text: "terms_of_service".tr(),
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  // Navigate to terms of service
+                },
+            ),
+            const TextSpan(text: " and "),
+            TextSpan(
+              text: "privacy_policy".tr(),
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  // Navigate to privacy policy
+                },
+            ),
+          ],
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
@@ -207,13 +287,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isLoading
-                    ? null
-                    : () {
-                        if (_formKey.currentState?.validate() ?? false) {
-                          _loginWithEmail();
-                        }
-                      },
+                onPressed: _isLoading ? null : _loginWithEmail,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 16),
