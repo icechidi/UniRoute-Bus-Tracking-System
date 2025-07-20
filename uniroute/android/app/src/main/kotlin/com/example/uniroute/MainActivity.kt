@@ -2,5 +2,4 @@ package com.example.uniroute  // ⚠️ Change to match your app's actual packag
 
 import io.flutter.embedding.android.FlutterActivity
 
-class MainActivity: FlutterActivity() {
-}
+class MainActivity: FlutterActivity()
