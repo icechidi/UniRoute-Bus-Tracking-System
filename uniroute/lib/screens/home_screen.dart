@@ -11,14 +11,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  Completer<GoogleMapController> _controller = Completer();
+  final Completer<GoogleMapController> _controller = Completer();
 
-  // Lefkoşa, North Cyprus Longitude and Latitude
   static const LatLng _lefkoshaLatLng = LatLng(35.1856, 33.3823);
-// Initial camera position for the map
-  static const CameraPosition _kLefkosha = CameraPosition(
+
+  static const CameraPosition _initialCameraPosition = CameraPosition(
     target: _lefkoshaLatLng,
-    zoom: 16.0,
+    zoom: 16,
     tilt: 45,
   );
 
@@ -27,52 +26,39 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _getUserLocation());
   }
-// Handle map creation and user location
-  Future<void> _onMapCreated(GoogleMapController controller) async {
-    _controller.complete(controller);
-    await _handleLocation();
-  }
-// Handle user location and add marker
-  Future<void> _handleLocation() async {
-    final hasPermission = await _checkAndRequestPermission();
-    if (!hasPermission) return;
 
-    final position = await Geolocator.getCurrentPosition();
-    final LatLng userLatLng = LatLng(position.latitude, position.longitude);
+  Future<void> _getUserLocation() async {
+    bool permissionGranted = await _handlePermissions();
+    if (!permissionGranted) return;
 
-    // Add marker to user's current location and move camera if within 20km radius of Lefkoşa
+    Position position = await Geolocator.getCurrentPosition();
+    final userLatLng = LatLng(position.latitude, position.longitude);
+
     setState(() {
       _userMarker = Marker(
-        markerId: const MarkerId("user"),
+        markerId: const MarkerId('user'),
         position: userLatLng,
-        infoWindow: const InfoWindow(title: "Your Location"),
+        infoWindow: const InfoWindow(title: 'You are here'),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
       );
     });
 
-    // Move camera only if within 20km radius of Lefkoşa
-    final double distance = Geolocator.distanceBetween(
-      _lefkoshaLatLng.latitude,
-      _lefkoshaLatLng.longitude,
-      userLatLng.latitude,
-      userLatLng.longitude,
-    );
-
-    if (distance <= 20000) {
-      final GoogleMapController mapController = await _controller.future;
-      mapController.animateCamera(CameraUpdate.newLatLng(userLatLng));
-    }
+    final controller = await _controller.future;
+    controller.animateCamera(CameraUpdate.newLatLng(userLatLng));
   }
-// Check and request location permission
-  Future<bool> _checkAndRequestPermission() async {
+
+  Future<bool> _handlePermissions() async {
     LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
       permission = await Geolocator.requestPermission();
     }
-    return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
   }
-// Build the UI with Google Map
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,15 +67,15 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
       ),
       body: GoogleMap(
-        initialCameraPosition: _kLefkosha,
+        initialCameraPosition: _initialCameraPosition,
         mapType: MapType.hybrid,
         myLocationEnabled: true,
         myLocationButtonEnabled: true,
         zoomControlsEnabled: false,
-        onMapCreated: _onMapCreated,
+        onMapCreated: (controller) => _controller.complete(controller),
         markers: {
           Marker(
-            markerId: const MarkerId("lefkosha"),
+            markerId: const MarkerId("center"),
             position: _lefkoshaLatLng,
             infoWindow: const InfoWindow(title: "Lefkoşa, North Cyprus"),
           ),
