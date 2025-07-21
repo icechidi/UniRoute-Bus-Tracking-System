@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'route.dart';
 
 void main() => runApp(const BusApp());
 
@@ -9,8 +10,10 @@ class BusApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: const MapScreen(),
+      title: 'Bus App',
       debugShowCheckedModeBanner: false,
+      onGenerateRoute: AppRoutes.generateRoute,
+      initialRoute: '/',
     );
   }
 }
@@ -28,6 +31,20 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
+  }
+
+  void _onNavTap(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+
+    if (index == 0) {
+      _showBottomSheet('location');
+    } else if (index == 1) {
+      Navigator.pushNamed(context, '/schedule');
+    } else if (index == 2) {
+      Navigator.pushNamed(context, '/profile');
+    }
   }
 
   void _showBottomSheet(String type) {
@@ -61,29 +78,14 @@ class _MapScreenState extends State<MapScreen> {
                   leading: Icon(Icons.location_on, color: Colors.red),
                   title: Text("Yalcin Park - Gonyeli"),
                 ),
-              ] else if (type == 'notifications') ...[
-                const Text('Notifications will be listed here.'),
+              ] else ...[
+                const Text('Notifications will be listed here.')
               ]
             ],
           ),
         );
       },
     );
-  }
-
-  void _onNavTap(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-
-    if (index == 0) _showBottomSheet('location');
-    if (index == 1) _showBottomSheet('notifications');
-    if (index == 2) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const UserProfilePage()),
-      );
-    }
   }
 
   @override
@@ -94,7 +96,7 @@ class _MapScreenState extends State<MapScreen> {
           GoogleMap(
             onMapCreated: _onMapCreated,
             initialCameraPosition: const CameraPosition(
-              target: LatLng(42.3601, -71.0589), // Sample location
+              target: LatLng(42.3601, -71.0589),
               zoom: 14,
             ),
             myLocationEnabled: true,
@@ -128,49 +130,23 @@ class _MapScreenState extends State<MapScreen> {
         onTap: _onNavTap,
         items: [
           BottomNavigationBarItem(
-            icon: Image.asset(
-              'assets/icons/location_icon.png',
-              width: 32,
-              height: 32,
-            ),
+            icon: Image.asset('assets/icons/location_icon.png',
+                width: 32, height: 32),
             label: 'Location',
           ),
           BottomNavigationBarItem(
-            icon: Image.asset(
-              'assets/icons/notification_icon.png',
-              width: 32,
-              height: 32,
-            ),
-            label: 'Notifications',
+            icon: Image.asset('assets/icons/schedule_icon.png',
+                width: 32, height: 32),
+            label: 'Schedule',
           ),
           BottomNavigationBarItem(
-            icon: Image.asset(
-              'assets/icons/user_icon.png',
-              width: 32,
-              height: 32,
-            ),
+            icon: Image.asset('assets/icons/user_icon.png',
+                width: 32, height: 32),
             label: 'Profile',
           ),
         ],
-        backgroundColor: Colors.white,
-        elevation: 10,
       ),
     );
   }
 }
 
-// ----------------------------------
-// User Profile Page
-// ----------------------------------
-
-class UserProfilePage extends StatelessWidget {
-  const UserProfilePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('User Profile')),
-      body: const Center(child: Text('User Profile Details Here')),
-    );
-  }
-}
