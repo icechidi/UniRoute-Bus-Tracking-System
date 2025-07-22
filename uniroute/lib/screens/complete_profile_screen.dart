@@ -8,6 +8,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/gestures.dart';
+
 import '../widgets/common_widgets.dart';
 import 'success_screen.dart';
 
@@ -102,7 +105,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   // Validation methods
   ValidationResult _validateStudentId(String value) {
     if (value.isEmpty) {
-      return const ValidationResult.valid();
+      return ValidationResult.invalid("student_id_required".tr());
     }
 
     if (value.length != _studentIdLength) {
@@ -219,7 +222,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   void _onUsernameChanged(String value) {
     _usernameDebounce?.cancel();
 
-    if (value.trim().length > _minUsernameLength) {
+    if (value.trim().length >= _minUsernameLength) {
       _usernameDebounce = Timer(_debounceDelay, () {
         _generateUsernameSuggestions(value.trim());
       });
@@ -232,6 +235,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   void _selectUsernameSuggestion(String suggestion) {
     _usernameController.text = suggestion;
+    FocusScope.of(context).unfocus();
     setState(() {
       _usernameSuggestions = [];
     });
@@ -330,7 +334,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   void _showCountryPicker() {
     showCountryPicker(
       context: context,
-      showPhoneCode: false,
+      showPhoneCode: true,
       onSelect: (Country country) {
         setState(() {
           _selectedCountry = country;
@@ -338,6 +342,15 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         });
       },
     );
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showErrorSnackBar('could_not_open_link'.tr());
+    }
   }
 
   @override
@@ -364,6 +377,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               _buildPhoneField(),
               const SizedBox(height: 32),
               _buildSubmitButton(),
+              const SizedBox(height: 24),
+              _buildTermsAndPrivacyText(),
             ],
           ),
         ),
@@ -400,7 +415,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   Widget _buildUsernameField() {
     return TextFormField(
       controller: _usernameController,
-      decoration: buildInputDecoration('username'.tr()).copyWith(),
+      decoration: buildInputDecoration('username'.tr()),
       validator: _validateUsername,
       onChanged: _onUsernameChanged,
       enabled: !_isSubmitting,
@@ -470,14 +485,17 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       controller: _phoneController,
       decoration: buildInputDecoration('phone_number'.tr()),
       initialCountryCode: _selectedCountry?.countryCode ?? 'US',
+      keyboardType: TextInputType.phone,
       onChanged: (phone) {
-        _phoneNumberWithCountryCode = phone.completeNumber;
+        if (phone.number.isNotEmpty) {
+          _phoneNumberWithCountryCode = phone.completeNumber;
+        }
       },
       validator: (phone) {
         if (phone == null || phone.number.isEmpty) {
           return 'phone_required'.tr();
         }
-        return null;
+        return null; // rely on intl_phone_field validation
       },
       enabled: !_isSubmitting,
     );
@@ -512,6 +530,47 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 ),
               )
             : Text('complete_profile'.tr()),
+      ),
+    );
+  }
+
+  Widget _buildTermsAndPrivacyText() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Text.rich(
+        TextSpan(
+          text: 'i_agree_to'.tr(),
+          style: Theme.of(context).textTheme.bodySmall,
+          children: [
+            const TextSpan(text: " "),
+            TextSpan(
+              text: 'terms_of_service'.tr(),
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.w500,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  _openUrl('https://yourapp.com/terms');
+                },
+            ),
+            const TextSpan(text: " and "),
+            TextSpan(
+              text: 'privacy_policy'.tr(),
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.w500,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  _openUrl('https://yourapp.com/privacy');
+                },
+            ),
+            const TextSpan(text: " "),
+          ],
+        ),
       ),
     );
   }

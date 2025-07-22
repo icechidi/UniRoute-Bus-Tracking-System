@@ -1,6 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart'; // Updated package
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -10,6 +10,9 @@ class AuthServices {
   static const String _userCollection = 'users';
   static const String _userRoleKey = 'userRole';
   static const String _defaultRole = UserRoles.student;
+  static const String _keepSignedInKey = 'keep_signed_in';
+  static const String _authTokenKey = 'auth_token';
+  static const String _authEmailKey = 'auth_email';
 
   // Google Sign-In
   static Future<UserCredential?> signInWithGoogle() async {
@@ -34,6 +37,12 @@ class AuthServices {
       final UserCredential userCredential =
           await FirebaseAuth.instance.signInWithCredential(credential);
 
+      // Get and store token for Google sign-in
+      final token = await userCredential.user?.getIdToken();
+      if (token != null) {
+        await saveAuthData(token, userCredential.user?.email, true);
+      }
+
       await _handlePostSignIn(userCredential.user?.email);
       return userCredential;
     } catch (e) {
@@ -45,7 +54,6 @@ class AuthServices {
   // Apple Sign-In
   static Future<UserCredential?> signInWithApple() async {
     try {
-      // 1. Perform the sign-in request
       final credential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
@@ -53,21 +61,24 @@ class AuthServices {
         ],
       );
 
-      // 2. Create Firebase credential
       final oauthCredential = OAuthProvider("apple.com").credential(
         idToken: credential.identityToken,
         accessToken: credential.authorizationCode,
       );
 
-      // 3. Sign in to Firebase
       final UserCredential userCredential =
           await FirebaseAuth.instance.signInWithCredential(oauthCredential);
 
-      // 4. Update display name if available (only provided on first login)
       if (credential.givenName != null && credential.familyName != null) {
         await userCredential.user?.updateDisplayName(
           '${credential.givenName} ${credential.familyName}',
         );
+      }
+
+      // Get and store token for Apple sign-in
+      final token = await userCredential.user?.getIdToken();
+      if (token != null) {
+        await saveAuthData(token, userCredential.user?.email, true);
       }
 
       await _handlePostSignIn(userCredential.user?.email);
@@ -80,10 +91,17 @@ class AuthServices {
 
   // Email/Password Sign-In
   static Future<UserCredential?> signInWithEmail(
-      String email, String password) async {
+      String email, String password, bool keepSignedIn) async {
     try {
       final UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
+
+      // Get and store token for email sign-in
+      final token = await userCredential.user?.getIdToken();
+      if (token != null) {
+        await saveAuthData(token, email, keepSignedIn);
+      }
+
       await _handlePostSignIn(email);
       return userCredential;
     } catch (e) {
@@ -124,13 +142,44 @@ class AuthServices {
     try {
       await FirebaseAuth.instance.signOut();
       await GoogleSignIn().signOut();
-      // No need to sign out from Apple as it's one-time per session
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_userRoleKey);
+      await prefs.remove(_keepSignedInKey);
+      await prefs.remove(_authTokenKey);
+      await prefs.remove(_authEmailKey);
     } catch (e) {
       debugPrint("Sign out error: $e");
     }
+  }
+
+  // Auth persistence methods
+  static Future<void> saveAuthData(
+      String? token, String? email, bool keepSignedIn) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keepSignedInKey, keepSignedIn);
+    if (keepSignedIn && token != null && email != null) {
+      await prefs.setString(_authTokenKey, token);
+      await prefs.setString(_authEmailKey, email);
+    } else {
+      await prefs.remove(_authTokenKey);
+      await prefs.remove(_authEmailKey);
+    }
+  }
+
+  static Future<bool> shouldKeepSignedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keepSignedInKey) ?? false;
+  }
+
+  static Future<String?> getStoredToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_authTokenKey);
+  }
+
+  static Future<String?> getStoredEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_authEmailKey);
   }
 
   // Get current Firebase user

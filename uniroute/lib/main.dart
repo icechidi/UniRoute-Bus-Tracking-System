@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
+import 'screens/student_login_screen.dart'; // Add this import
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +50,9 @@ class MyApp extends StatelessWidget {
       home: initializationError
           ? _InitializationErrorScreen()
           : const SplashScreen(),
+      routes: {
+        '/login': (context) => const StudentLoginScreen(), // Add this route
+      },
     );
   }
 }

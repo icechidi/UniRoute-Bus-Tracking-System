@@ -80,12 +80,11 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
 
   Future<void> _setLanguage(Locale locale) async {
     setState(() {
-      _languageSelected = true; // Immediate UI update
+      _languageSelected = true;
     });
 
     await _animationController.reverse();
 
-    // Perform async operations after animation completes
     await Future.wait([
       _prefs.setString('selected_language_code', locale.languageCode),
       if (mounted) context.setLocale(locale),
@@ -136,48 +135,6 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
     }
   }
 
-  Widget _buildRoleButton(String label, IconData icon, String role) {
-    final isSelected = _selectedRole == role;
-    return GestureDetector(
-      onTap: () => _selectRole(role),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 25),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.black.withAlpha((0.05 * 255).toInt())
-              : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: isSelected
-              ? Border.all(color: Colors.black, width: 2)
-              : Border.all(color: Colors.grey[300]!),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha((0.1 * 255).toInt()),
-              blurRadius: 8,
-              offset: const Offset(2, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label.tr(),
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.black : Colors.black87,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Icon(icon, color: isSelected ? Colors.black : Colors.black87),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildLanguageOption(String flag, String language, Locale locale) {
     return Material(
       color: Colors.transparent,
@@ -188,10 +145,7 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           child: Row(
             children: [
-              Text(
-                flag,
-                style: const TextStyle(fontSize: 28),
-              ),
+              Text(flag, style: const TextStyle(fontSize: 28)),
               const SizedBox(width: 16),
               Text(
                 language.tr(),
@@ -236,12 +190,23 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                     ),
                   ),
                   const SizedBox(height: 60),
-                  _buildRoleButton(
-                      'student', LucideIcons.graduationCap, 'student'),
+                  RoleButton(
+                    label: 'student',
+                    icon: LucideIcons.graduationCap,
+                    role: 'student',
+                    selectedRole: _selectedRole,
+                    onTap: () => _selectRole('student'),
+                  ),
                   const SizedBox(height: 20),
                   const Divider(thickness: 1),
                   const SizedBox(height: 20),
-                  _buildRoleButton('driver', LucideIcons.bus, 'driver'),
+                  RoleButton(
+                    label: 'driver',
+                    icon: LucideIcons.bus,
+                    role: 'driver',
+                    selectedRole: _selectedRole,
+                    onTap: () => _selectRole('driver'),
+                  ),
                   const SizedBox(height: 40),
                   SizedBox(
                     width: double.infinity,
@@ -277,7 +242,7 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
           if (!_languageSelected)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withAlpha((0.6 * 255).toInt()),
+                color: Colors.black.withOpacity(0.6),
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: SlideTransition(
@@ -323,6 +288,89 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class RoleButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final String role;
+  final String? selectedRole;
+  final VoidCallback onTap;
+  final double? iconSize;
+  final EdgeInsetsGeometry? padding;
+
+  const RoleButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.role,
+    required this.selectedRole,
+    required this.onTap,
+    this.iconSize,
+    this.padding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = selectedRole == role;
+    final color = isSelected ? Colors.black : Colors.grey[700];
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding:
+            padding ?? const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.black.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? Colors.black : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: iconSize ?? 32,
+              color: color,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              label.tr(),
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'role_description_$label'.tr(),
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -34,11 +34,13 @@ dependencies:
   intl_phone_field: ^3.2.0  # Phone input with formatting
   country_picker: ^2.0.20  # For "Choose Country"
 
+
   # 🌐 Localization
   easy_localization: ^3.0.1
   intl: 0.20.2  # Required by easy_localization for formatting
   http: 1.4.0
   email_validator: ^2.0.1  # Email validation
+  url_launcher: ^6.3.2 # Open URLs in browser
 
   # 🎨 Animations & Styling
   lottie: ^3.1.0  # Success animation
@@ -46,6 +48,7 @@ dependencies:
   flutter_spinkit: ^5.2.0  # Loading indicators
   google_fonts: ^6.1.0  # Modern font styles
   fluttertoast: ^8.2.4  # Toast messages
+
 
 dev_dependencies:
   flutter_test:

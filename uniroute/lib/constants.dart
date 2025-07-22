@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Central place for all app-wide constants.
 class AppConstants {
   // App Info
   static const String appName = 'UniRoute';
@@ -31,11 +30,17 @@ class AppConstants {
   static const String statusKey = 'status';
   static const String roleKey = 'role';
 
-  // Localization keys (Used with `.tr()`)
+  // SharedPreferences keys
+  static const String keepSignedInKey = 'keep_signed_in';
+  static const String authTokenKey = 'auth_token';
+  static const String authEmailKey = 'auth_email';
+
+  // Localization keys
   static const String fieldRequired = 'fields_required';
   static const String invalidEmail = 'invalid_email';
   static const String invalidPassword = 'invalid_password';
   static const String passwordMismatch = 'passwords_do_not_match';
   static const String userExists = 'user_already_exists';
   static const String loginFailed = 'login_failed';
+  static const String keepMeSignedIn = 'keep_me_signed_in';
 }

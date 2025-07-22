@@ -29,6 +29,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _showPassword = false;
   bool _isLoading = false;
+  bool _keepSignedIn = true;
 
   Future<void> _loginWithEmail() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -38,7 +39,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await AuthServices.signInWithEmail(email, password);
+      await AuthServices.signInWithEmail(email, password, _keepSignedIn);
       if (!mounted) return;
       await _handleAuthSuccess(FirebaseAuth.instance.currentUser);
     } on FirebaseAuthException catch (e) {
@@ -58,6 +59,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           "account_not_found".tr(),
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
@@ -71,7 +73,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
             onPressed: () => Navigator.pop(context),
             child: Text(
               "cancel".tr(),
-              style: GoogleFonts.poppins(color: Colors.grey),
+              style: GoogleFonts.poppins(color: Colors.grey[600]),
             ),
           ),
           TextButton(
@@ -120,6 +122,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           (data['account_status'] ?? '').toString().toLowerCase();
 
       if (emailStatus.isEmpty || emailStatus == 'unverified') {
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -158,6 +161,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           "error".tr(),
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
@@ -189,10 +193,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         style: OutlinedButton.styleFrom(
           backgroundColor: backgroundColor,
           padding: const EdgeInsets.symmetric(vertical: 16),
+          side: BorderSide(color: borderColor.withOpacity(0.3), width: 1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: borderColor, width: 1),
           ),
+          elevation: 0,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -214,39 +219,49 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   }
 
   Widget buildTermsText(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Text.rich(
         TextSpan(
           text: "by_clicking_continue".tr(),
           style: GoogleFonts.poppins(
             fontSize: 12,
             color: Colors.grey[600],
+            height: 1.4,
           ),
           children: [
+            const TextSpan(text: " "), // Added space
             TextSpan(
               text: "terms_of_service".tr(),
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
+                fontSize: 12,
                 color: Colors.blue,
                 fontWeight: FontWeight.bold,
+                decoration: TextDecoration.underline,
               ),
               recognizer: TapGestureRecognizer()
                 ..onTap = () {
                   // Navigate to terms of service
                 },
             ),
-            const TextSpan(text: " and "),
+            TextSpan(
+              text: " and ",
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+            ),
             TextSpan(
               text: "privacy_policy".tr(),
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
+                fontSize: 12,
                 color: Colors.blue,
                 fontWeight: FontWeight.bold,
+                decoration: TextDecoration.underline,
               ),
               recognizer: TapGestureRecognizer()
                 ..onTap = () {
                   // Navigate to privacy policy
                 },
             ),
+            const TextSpan(text: " "), // Added space
           ],
         ),
         textAlign: TextAlign.center,
@@ -259,154 +274,240 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     return AuthScaffold(
       title: "login".tr(),
       subtitle: "login_instruction".tr(),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              validator: AppValidators.email,
-              decoration: buildInputDecoration('email_hint'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _passwordController,
-              obscureText: !_showPassword,
-              validator: AppValidators.password,
-              decoration: buildInputDecoration('password_hint').copyWith(
-                suffixIcon: IconButton(
-                  icon: Icon(
-                      _showPassword ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () =>
-                      setState(() => _showPassword = !_showPassword),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _loginWithEmail,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Email Input
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: AppValidators.email,
+                  decoration: buildInputDecoration('email_hint').copyWith(
+                    prefixIcon:
+                        Icon(Icons.email_outlined, color: Colors.grey[600]),
                   ),
                 ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation(Colors.white),
-                      )
-                    : Text(
-                        "continue".tr(),
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
               ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const Expanded(child: Divider(thickness: 1)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text(
-                    "or".tr(),
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.grey[700],
+
+              // Password Input
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: TextFormField(
+                  controller: _passwordController,
+                  obscureText: !_showPassword,
+                  validator: AppValidators.password,
+                  decoration: buildInputDecoration('password_hint').copyWith(
+                    prefixIcon:
+                        Icon(Icons.lock_outline, color: Colors.grey[600]),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _showPassword ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.grey[600],
+                      ),
+                      onPressed: () =>
+                          setState(() => _showPassword = !_showPassword),
                     ),
                   ),
                 ),
-                const Expanded(child: Divider(thickness: 1)),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSocialButton(
-              text: "continue_google",
-              icon: Image.asset(
-                'assets/images/google_logo.png',
-                width: 24,
-                height: 24,
               ),
-              onPressed: () async {
-                final userCredential = await AuthServices.signInWithGoogle();
-                await _handleAuthSuccess(userCredential?.user);
-              },
-            ),
-            if (isAppleSignInAvailable)
-              _buildSocialButton(
-                text: "continue_apple",
-                icon: const Icon(
-                  Icons.apple,
-                  color: Colors.white,
-                  size: 24,
+
+              // Keep me signed in checkbox
+              Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: _keepSignedIn,
+                      onChanged: (value) =>
+                          setState(() => _keepSignedIn = value ?? true),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'keep_me_signed_in'.tr(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                backgroundColor: Colors.black,
-                borderColor: Colors.black,
-                textColor: Colors.white,
+              ),
+
+              // Login Button
+              Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _loginWithEmail,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          "continue".tr(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                ),
+              ),
+
+              // Divider
+              Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Divider(
+                        thickness: 1,
+                        color: Colors.grey[300],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        "or".tr(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Divider(
+                        thickness: 1,
+                        color: Colors.grey[300],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Social Login Buttons
+              _buildSocialButton(
+                text: "continue_google",
+                icon: Image.asset(
+                  'assets/images/google_logo.png',
+                  width: 24,
+                  height: 24,
+                ),
                 onPressed: () async {
-                  final userCredential = await AuthServices.signInWithApple();
+                  final userCredential = await AuthServices.signInWithGoogle();
                   await _handleAuthSuccess(userCredential?.user);
                 },
               ),
-            const SizedBox(height: 20),
-            buildTermsText(context),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                OutlinedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ForgotPasswordScreen(),
-                      ),
-                    );
+
+              if (isAppleSignInAvailable)
+                _buildSocialButton(
+                  text: "continue_apple",
+                  icon: const Icon(
+                    Icons.apple,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  backgroundColor: Colors.black,
+                  borderColor: Colors.black,
+                  textColor: Colors.white,
+                  onPressed: () async {
+                    final userCredential = await AuthServices.signInWithApple();
+                    await _handleAuthSuccess(userCredential?.user);
                   },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
+                ),
+
+              const SizedBox(height: 8),
+
+              // Terms and Privacy
+              buildTermsText(context),
+
+              const SizedBox(height: 24),
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ForgotPasswordScreen(),
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      child: Text(
+                        "forgot_password".tr(),
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[700],
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text(
-                    "forgot_password".tr(),
-                    style: GoogleFonts.poppins(),
-                  ),
-                ),
-                OutlinedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const CreateAccountScreen(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CreateAccountScreen(),
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(
+                            color:
+                                Colors.grey[300]!), // Changed from blue to grey
                       ),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
+                      child: Text(
+                        "create_account".tr(),
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[700], // Changed from blue to grey
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text(
-                    "create_account".tr(),
-                    style: GoogleFonts.poppins(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-          ],
+                ],
+              ),
+
+              const SizedBox(height: 30),
+            ],
+          ),
         ),
       ),
     );

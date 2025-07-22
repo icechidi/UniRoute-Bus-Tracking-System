@@ -26,7 +26,8 @@ Widget buildTermsText(BuildContext context) {
       children: [
         TextSpan(
           text: "terms_of_service".tr(),
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.blue),
+          style: GoogleFonts.poppins(
+              fontWeight: FontWeight.bold, color: Colors.blue),
           recognizer: TapGestureRecognizer()
             ..onTap = () => Navigator.pushNamed(context, '/termsOfService'),
         ),
@@ -36,7 +37,8 @@ Widget buildTermsText(BuildContext context) {
         ),
         TextSpan(
           text: "privacy_policy".tr(),
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.blue),
+          style: GoogleFonts.poppins(
+              fontWeight: FontWeight.bold, color: Colors.blue),
           recognizer: TapGestureRecognizer()
             ..onTap = () => Navigator.pushNamed(context, '/privacyPolicy'),
         ),
@@ -83,7 +85,8 @@ class AuthScaffold extends StatelessWidget {
               const SizedBox(height: 24),
               Text(
                 title,
-                style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(
+                    fontSize: 22, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               Text(
