@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'screens/driver_login_page.dart';
 
 void main() {
-  runApp(const BusApp());
+  runApp(const MyApp());
 }
 
-class BusApp extends StatelessWidget {
-  const BusApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Bus Route App',
+      title: 'University Bus Tracker',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const HomeScreen(),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: const DriverLoginPage(),
     );
   }
 }
