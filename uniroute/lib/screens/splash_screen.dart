@@ -1,4 +1,6 @@
+// splash_screen.dart
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,32 +20,45 @@ class _SplashScreenState extends State<SplashScreen> {
   static const _minSplashDuration = Duration(seconds: 2);
   static const _firstLaunchKey = 'isFirstLaunch';
   static const _transitionDuration = Duration(milliseconds: 300);
+  static const _maxRetries = 3;
 
   bool _showError = false;
-  Exception? _lastError;
+  String? _errorMessage;
+  int _retryCount = 0;
+  Timer? _retryTimer;
 
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeApp());
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _initializeApp() async {
     final stopwatch = Stopwatch()..start();
     try {
-      await _checkFirstLaunch();
-      await _precacheResources();
-      final user = await _checkAuthState();
+      await Future.wait([
+        _checkFirstLaunch(),
+        _precacheResources(),
+      ]);
 
+      final user = await _checkAuthState();
       final remainingTime = _minSplashDuration - stopwatch.elapsed;
+
       if (remainingTime > Duration.zero) {
         await Future.delayed(remainingTime);
       }
+
       if (!mounted) return;
       _navigateBasedOnAuth(user);
     } catch (e) {
       if (!mounted) return;
-      _handleInitializationError(e as Exception);
+      _handleInitializationError(e.toString());
     } finally {
       stopwatch.stop();
     }
@@ -52,76 +67,71 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkFirstLaunch() async {
     final prefs = await SharedPreferences.getInstance();
     final isFirstLaunch = prefs.getBool(_firstLaunchKey) ?? true;
+
     if (isFirstLaunch) {
       await prefs.setBool(_firstLaunchKey, false);
-      await prefs.setString('language', 'en');
     }
   }
 
   Future<void> _precacheResources() async {
-    await Future.wait([
-      precacheImage(const AssetImage('assets/images/bus_logo.gif'), context),
-    ]);
+    try {
+      await precacheImage(
+          const AssetImage('assets/images/bus_logo.gif'), context);
+    } catch (e) {
+      debugPrint('Precache error: $e');
+    }
   }
 
   Future<User?> _checkAuthState() async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
+
       if (user == null) {
-        final shouldKeepSignedIn = await AuthServices.shouldKeepSignedIn();
-        if (shouldKeepSignedIn) {
-          final storedToken = await AuthServices.getStoredToken();
-          final storedEmail = await AuthServices.getStoredEmail();
-          if (storedToken != null && storedEmail != null) {
-            try {
-              final credential =
-                  GoogleAuthProvider.credential(idToken: storedToken);
-              final userCredential =
-                  await FirebaseAuth.instance.signInWithCredential(credential);
-              user = userCredential.user;
-              if (user?.email != storedEmail) {
-                await FirebaseAuth.instance.signOut();
-                user = null;
-              }
-            } catch (_) {}
-          }
+        final token = await AuthServices.getStoredToken();
+        final email = await AuthServices.getStoredEmail();
+
+        if (token != null && email != null) {
+          final credential = GoogleAuthProvider.credential(idToken: token);
+          final userCredential =
+              await FirebaseAuth.instance.signInWithCredential(credential);
+          user = userCredential.user;
         }
       }
       return user;
-    } catch (_) {
+    } catch (e) {
       return null;
     }
   }
 
   void _navigateBasedOnAuth(User? user) {
-    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
         transitionDuration: _transitionDuration,
-        pageBuilder: (_, __, ___) {
-          if (user != null) {
-            return const SuccessScreen();
-          } else {
-            return const RoleSelectorScreen();
-          }
-        },
-        transitionsBuilder: (_, animation, __, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
+        pageBuilder: (_, __, ___) =>
+            user != null ? const SuccessScreen() : const RoleSelectorScreen(),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
       ),
     );
   }
 
-  void _handleInitializationError(Exception error) {
+  void _handleInitializationError(String error) {
+    _retryCount++;
     setState(() {
-      _lastError = error;
+      _errorMessage = error;
       _showError = true;
     });
-    Timer(const Duration(seconds: 5), () {
+
+    _retryTimer = Timer(const Duration(seconds: 5), () {
       if (!mounted) return;
       setState(() => _showError = false);
-      _initializeApp();
+
+      if (_retryCount <= _maxRetries) {
+        _initializeApp();
+      } else {
+        _navigateBasedOnAuth(null);
+      }
     });
   }
 
@@ -143,37 +153,58 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           ),
           if (_showError)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black54,
-                child: Center(
-                  child: AlertDialog(
-                    title: Text('init_error_title'.tr()),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_lastError?.toString() ?? 'Unknown error'),
-                        const SizedBox(height: 20),
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 10),
-                        const Text('Attempting to recover...'),
-                      ],
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: _initializeApp,
-                        child: const Text('Retry Now'),
-                      ),
-                      TextButton(
-                        onPressed: () => _navigateBasedOnAuth(null),
-                        child: const Text('Continue Anyway'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            _ErrorOverlay(
+              error: _errorMessage,
+              onRetry: _initializeApp,
+              onContinue: () => _navigateBasedOnAuth(null),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _ErrorOverlay extends StatelessWidget {
+  final String? error;
+  final VoidCallback onRetry;
+  final VoidCallback onContinue;
+
+  const _ErrorOverlay({
+    required this.error,
+    required this.onRetry,
+    required this.onContinue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black54,
+        child: Center(
+          child: AlertDialog(
+            title: Text('init_error_title'.tr()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(error ?? 'Unknown error'),
+                const SizedBox(height: 20),
+                const CircularProgressIndicator(),
+                const SizedBox(height: 10),
+                const Text('Attempting to recover...'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: onRetry,
+                child: const Text('Retry Now'),
+              ),
+              TextButton(
+                onPressed: onContinue,
+                child: const Text('Continue Anyway'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

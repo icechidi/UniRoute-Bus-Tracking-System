@@ -1,7 +1,7 @@
+// email_verification_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/common_widgets.dart';
@@ -19,9 +19,12 @@ class EmailVerificationScreen extends StatefulWidget {
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   Timer? _verificationTimer;
+  Timer? _cooldownTimer;
+
   bool _isLoading = false;
   int _resendCooldown = 60;
-  Timer? _cooldownTimer;
+
+  bool get _canResend => _resendCooldown <= 0 && !_isLoading;
 
   @override
   void initState() {
@@ -37,7 +40,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     super.dispose();
   }
 
-  /// Send verification email regardless of emailVerified status (forceSend = true)
   Future<void> _sendVerificationEmail({bool forceSend = false}) async {
     setState(() {
       _isLoading = true;
@@ -46,23 +48,33 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        // Always send email if forced OR if not verified yet
-        if (forceSend || !user.emailVerified) {
-          await user.sendEmailVerification();
-          _startCooldownTimer();
-        }
+      if (user != null && (forceSend || !user.emailVerified)) {
+        await user.sendEmailVerification();
+        _startCooldownTimer();
       }
+    } catch (_) {
+      // Ignore error for UX
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _startCooldownTimer() {
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_resendCooldown <= 0) {
+        timer.cancel();
+      } else {
+        setState(() => _resendCooldown--);
+      }
+    });
   }
 
   void _startVerificationCheck() {
     _verificationTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (timer) => _checkVerificationStatus(),
-    );
+        const Duration(seconds: 3), (timer) => _checkVerificationStatus());
   }
 
   Future<void> _checkVerificationStatus() async {
@@ -73,41 +85,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       if (user?.emailVerified ?? false) {
         _verificationTimer?.cancel();
 
-        final email = user?.email;
-        if (email != null) {
-          // ✅ Update Firestore email_status to "verified"
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(email)
-              .update({'email_status': 'verified'});
-        }
-
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (_) => const CompleteProfileScreen(),
-            ),
+            MaterialPageRoute(builder: (_) => const CompleteProfileScreen()),
           );
         }
       }
     } catch (_) {
-      // Ignore silently
+      // Ignore error for UX
     }
-  }
-
-  void _startCooldownTimer() {
-    _cooldownTimer?.cancel();
-    _cooldownTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (timer) {
-        if (_resendCooldown <= 0) {
-          timer.cancel();
-        } else {
-          setState(() => _resendCooldown--);
-        }
-      },
-    );
   }
 
   @override
@@ -118,18 +105,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       child: Column(
         children: [
           const SizedBox(height: 20),
-          const Icon(
-            Icons.mark_email_read_outlined,
-            size: 80,
-            color: Colors.black87,
-          ),
+          const Icon(Icons.mark_email_read_outlined,
+              size: 80, color: Colors.black87),
           const SizedBox(height: 24),
           Text(
             widget.email,
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style:
+                GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 32),
           Text(
@@ -141,19 +123,23 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _resendCooldown > 0 || _isLoading
-                  ? null
-                  : () => _sendVerificationEmail(forceSend: true),
+              onPressed: _canResend
+                  ? () => _sendVerificationEmail(forceSend: true)
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: _isLoading
-                  ? const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
+                      ),
                     )
                   : Text(
                       _resendCooldown > 0
@@ -173,9 +159,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             onPressed: () => Navigator.pop(context),
             child: Text(
               "use_different_email".tr(),
-              style: GoogleFonts.poppins(
-                decoration: TextDecoration.underline,
-              ),
+              style: GoogleFonts.poppins(decoration: TextDecoration.underline),
             ),
           ),
         ],

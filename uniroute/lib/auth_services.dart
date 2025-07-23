@@ -1,15 +1,12 @@
+// auth_services.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 
 class AuthServices {
   // Constants
-  static const String _userCollection = 'users';
-  static const String _userRoleKey = 'userRole';
-  static const String _defaultRole = UserRoles.student;
   static const String _keepSignedInKey = 'keep_signed_in';
   static const String _authTokenKey = 'auth_token';
   static const String _authEmailKey = 'auth_email';
@@ -37,13 +34,12 @@ class AuthServices {
       final UserCredential userCredential =
           await FirebaseAuth.instance.signInWithCredential(credential);
 
-      // Get and store token for Google sign-in
+      // Store token for auto-login
       final token = await userCredential.user?.getIdToken();
       if (token != null) {
         await saveAuthData(token, userCredential.user?.email, true);
       }
 
-      await _handlePostSignIn(userCredential.user?.email);
       return userCredential;
     } catch (e) {
       debugPrint("Google sign-in error: $e");
@@ -69,19 +65,12 @@ class AuthServices {
       final UserCredential userCredential =
           await FirebaseAuth.instance.signInWithCredential(oauthCredential);
 
-      if (credential.givenName != null && credential.familyName != null) {
-        await userCredential.user?.updateDisplayName(
-          '${credential.givenName} ${credential.familyName}',
-        );
-      }
-
-      // Get and store token for Apple sign-in
+      // Store token for auto-login
       final token = await userCredential.user?.getIdToken();
       if (token != null) {
         await saveAuthData(token, userCredential.user?.email, true);
       }
 
-      await _handlePostSignIn(userCredential.user?.email);
       return userCredential;
     } catch (e) {
       debugPrint("Apple sign-in error: $e");
@@ -96,44 +85,16 @@ class AuthServices {
       final UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
 
-      // Get and store token for email sign-in
+      // Store token for auto-login
       final token = await userCredential.user?.getIdToken();
       if (token != null) {
         await saveAuthData(token, email, keepSignedIn);
       }
 
-      await _handlePostSignIn(email);
       return userCredential;
     } catch (e) {
       debugPrint("Email login error: $e");
       return null;
-    }
-  }
-
-  // Shared post-sign-in logic
-  static Future<void> _handlePostSignIn(String? email) async {
-    if (email == null) return;
-
-    await FirebaseFirestore.instance.enableNetwork();
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    final prefs = await SharedPreferences.getInstance();
-    final userDoc = await FirebaseFirestore.instance
-        .collection(_userCollection)
-        .doc(email)
-        .get();
-
-    if (userDoc.exists && userDoc.data()!.containsKey('role')) {
-      prefs.setString(_userRoleKey, userDoc['role']);
-    } else {
-      await FirebaseFirestore.instance
-          .collection(_userCollection)
-          .doc(email)
-          .set({
-        'email': email,
-        'role': _defaultRole,
-      });
-      prefs.setString(_userRoleKey, _defaultRole);
     }
   }
 
@@ -144,7 +105,6 @@ class AuthServices {
       await GoogleSignIn().signOut();
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_userRoleKey);
       await prefs.remove(_keepSignedInKey);
       await prefs.remove(_authTokenKey);
       await prefs.remove(_authEmailKey);
@@ -184,16 +144,4 @@ class AuthServices {
 
   // Get current Firebase user
   static User? getCurrentUser() => FirebaseAuth.instance.currentUser;
-
-  // Get saved user role
-  static Future<String?> getSavedUserRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_userRoleKey);
-  }
-}
-
-// User role constants
-class UserRoles {
-  static const String student = 'student';
-  static const String driver = 'driver';
 }

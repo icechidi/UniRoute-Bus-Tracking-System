@@ -1,3 +1,4 @@
+// role_selector_screen.dart
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -79,10 +80,7 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
   }
 
   Future<void> _setLanguage(Locale locale) async {
-    setState(() {
-      _languageSelected = true;
-    });
-
+    setState(() => _languageSelected = true);
     await _animationController.reverse();
 
     await Future.wait([
@@ -135,32 +133,6 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
     }
   }
 
-  Widget _buildLanguageOption(String flag, String language, Locale locale) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _setLanguage(locale),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Row(
-            children: [
-              Text(flag, style: const TextStyle(fontSize: 28)),
-              const SizedBox(width: 16),
-              Text(
-                language.tr(),
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _animationController.dispose();
@@ -175,21 +147,20 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
         children: [
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 40),
                   Image.asset(
                     'assets/images/bus_logo.png',
-                    width: 200,
+                    width: 180,
                     errorBuilder: (_, __, ___) => const Icon(
                       Icons.directions_bus,
-                      size: 200,
+                      size: 180,
                       color: Colors.grey,
                     ),
                   ),
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 32),
                   RoleButton(
                     label: 'student',
                     icon: LucideIcons.graduationCap,
@@ -197,9 +168,9 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                     selectedRole: _selectedRole,
                     onTap: () => _selectRole('student'),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Divider(thickness: 1),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   RoleButton(
                     label: 'driver',
                     icon: LucideIcons.bus,
@@ -207,7 +178,7 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                     selectedRole: _selectedRole,
                     onTap: () => _selectRole('driver'),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -235,57 +206,24 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
                             ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'by_continuing_you_agree'.tr(),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
           if (!_languageSelected)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.6),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: FadeTransition(
-                      opacity: _opacityAnimation,
-                      child: Container(
-                        padding: const EdgeInsets.only(
-                          top: 24,
-                          left: 16,
-                          right: 16,
-                          bottom: 32,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(24),
-                            topRight: Radius.circular(24),
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'select_language'.tr(),
-                              style: GoogleFonts.poppins(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            _buildLanguageOption(
-                                '🇹🇷', 'turkish', const Locale('tr')),
-                            const Divider(height: 1, thickness: 1),
-                            _buildLanguageOption(
-                                '🇬🇧', 'english', const Locale('en')),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            LanguageSelectionModal(
+              slideAnimation: _slideAnimation,
+              opacityAnimation: _opacityAnimation,
+              onLanguageSelected: (locale) => _setLanguage(locale),
             ),
         ],
       ),
@@ -299,8 +237,6 @@ class RoleButton extends StatelessWidget {
   final String role;
   final String? selectedRole;
   final VoidCallback onTap;
-  final double? iconSize;
-  final EdgeInsetsGeometry? padding;
 
   const RoleButton({
     super.key,
@@ -309,67 +245,151 @@ class RoleButton extends StatelessWidget {
     required this.role,
     required this.selectedRole,
     required this.onTap,
-    this.iconSize,
-    this.padding,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isSelected = selectedRole == role;
-    final color = isSelected ? Colors.black : Colors.grey[700];
+    final bool isSelected = selectedRole == role;
 
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap();
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding:
-            padding ?? const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.black.withOpacity(0.05) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? Colors.black : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
+    return Center(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 280,
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF8C8C8C) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: isSelected
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.25),
+                      blurRadius: 8,
+                      offset: const Offset(4, 4),
+                    ),
+                  ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 28,
+                    color: isSelected ? Colors.white : Colors.black,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    label.tr(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white : Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+              if (isSelected)
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+            ],
+          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: iconSize ?? 32,
-              color: color,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              label.tr(),
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
+      ),
+    );
+  }
+}
+
+class LanguageSelectionModal extends StatelessWidget {
+  final Animation<Offset> slideAnimation;
+  final Animation<double> opacityAnimation;
+  final Function(Locale) onLanguageSelected;
+
+  const LanguageSelectionModal({
+    super.key,
+    required this.slideAnimation,
+    required this.opacityAnimation,
+    required this.onLanguageSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.6),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: SlideTransition(
+            position: slideAnimation,
+            child: FadeTransition(
+              opacity: opacityAnimation,
+              child: Container(
+                padding: const EdgeInsets.only(top: 24, bottom: 32),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'select_language'.tr(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildLanguageOption('🇹🇷', 'turkish', const Locale('tr')),
+                    const Divider(height: 1, thickness: 1),
+                    _buildLanguageOption('🇬🇧', 'english', const Locale('en')),
+                  ],
+                ),
               ),
-              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Text(
-              'role_description_$label'.tr(),
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: color,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLanguageOption(String flag, String language, Locale locale) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onLanguageSelected(locale),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+          child: Row(
+            children: [
+              Text(flag, style: const TextStyle(fontSize: 28)),
+              const SizedBox(width: 16),
+              Text(
+                language.tr(),
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

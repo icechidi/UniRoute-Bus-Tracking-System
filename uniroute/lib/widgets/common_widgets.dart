@@ -1,6 +1,5 @@
-// File: widgets/common_widgets.dart
+// common_widgets.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -15,36 +14,6 @@ InputDecoration buildInputDecoration(String hint) {
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
     ),
-  );
-}
-
-Widget buildTermsText(BuildContext context) {
-  return Text.rich(
-    TextSpan(
-      text: "terms_agree".tr(),
-      style: GoogleFonts.poppins(color: Colors.grey, fontSize: 12),
-      children: [
-        TextSpan(
-          text: "terms_of_service".tr(),
-          style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold, color: Colors.blue),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => Navigator.pushNamed(context, '/termsOfService'),
-        ),
-        TextSpan(
-          text: " and ",
-          style: GoogleFonts.poppins(color: Colors.grey, fontSize: 12),
-        ),
-        TextSpan(
-          text: "privacy_policy".tr(),
-          style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold, color: Colors.blue),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => Navigator.pushNamed(context, '/privacyPolicy'),
-        ),
-      ],
-    ),
-    textAlign: TextAlign.center,
   );
 }
 
