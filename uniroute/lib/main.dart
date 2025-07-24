@@ -31,7 +31,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const MapScreen(),
-    const StudentScheduleScreen(), // Your original reminder screen
+    const StudentScheduleScreen(),
     const ProfileScreen(),
   ];
 
@@ -125,16 +125,26 @@ class StudentScheduleScreenState extends State<StudentScheduleScreen> {
     'Lefkosa - Hamitköy',
     'Lefkosa - Honda',
     'Gönyeli',
+    'Girne',
     'Güzelyurt'
   ];
 
-  final List<String> _departureTimes = [
-    '11:45 AM',
-    '12:45 PM',
-    '1:45 PM',
-    '3:45 PM',
-    '5:30 PM'
-  ];
+  List<String> get _availableDepartureTimes {
+    if (_selectedRoute == null) return [];
+    
+    switch (_selectedRoute) {
+      case 'Lefkosa - Hamitköy':
+      case 'Lefkosa - Honda':
+        return ['7:45 AM', '9:45 AM', '11:45 AM', '12:45 PM', '1:45 PM', '3:45 PM', '5:30 PM', '7:30 PM'];
+      case 'Gönyeli':
+        return ['7:45 AM', '9:45 AM', '11:45 AM', '12:45 PM', '1:45 PM', '3:45 PM', '5:30 PM'];
+      case 'Girne':
+      case 'Güzelyurt':
+        return ['7:45 AM', '12:45 PM', '5:30 PM'];
+      default:
+        return [];
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -150,12 +160,19 @@ class StudentScheduleScreenState extends State<StudentScheduleScreen> {
               value: _selectedRoute,
               hint: 'Select a route',
               items: _routes,
-              onChanged: (value) => setState(() => _selectedRoute = value),
+              onChanged: (value) {
+                setState(() {
+                  _selectedRoute = value;
+                  _selectedDepartureTimes.clear();
+                });
+              },
             ),
             const SizedBox(height: 24),
-            _buildSectionHeader('DEPARTURE TIME(S)'),
-            ..._departureTimes.map((time) => _buildTimeOption(time)),
-            const SizedBox(height: 24),
+            if (_selectedRoute != null) ...[
+              _buildSectionHeader('AVAILABLE DEPARTURE TIMES'),
+              ..._availableDepartureTimes.map((time) => _buildTimeOption(time)),
+              const SizedBox(height: 24),
+            ],
             if (_selectedRoute != null && _selectedDepartureTimes.isNotEmpty) ...[
               _buildSectionHeader('REMINDER SETTINGS'),
               _buildNotificationTimePicker(),
