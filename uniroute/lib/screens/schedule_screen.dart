@@ -3,13 +3,12 @@ import '../widgets/selection_chips.dart';
 import '../widgets/saved_schedules_visual.dart';
 import '../widgets/weekly_booking_section.dart';
 import '../widgets/schedule_tooltips_widget.dart';
-//import '../routes.dart'; // Reserved for future use or previously unused routes
 
-/// Main Schedule screen widget, which allows users to:
-/// - Select a route
-/// - Choose a time
-/// - Save combinations
-/// - View weekly booking
+/// Main schedule screen that allows users to:
+/// - Select route and time
+/// - Save them as a pair
+/// - View saved schedules
+/// - Tap on a calendar icon to view route/time popup only (no text shown)
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
@@ -18,7 +17,6 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
-  // List of predefined routes
   final List<String> routes = [
     "Gönyeli",
     "Lefkoşa - Hamitköy",
@@ -28,7 +26,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     "Lefkoşa - Hastane",
   ];
 
-  // List of predefined times
   final List<String> times = [
     "07:45",
     "09:45",
@@ -40,10 +37,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     "20:00"
   ];
 
-  int? selectedRouteIndex; // Currently selected route index
-  int? selectedTimeIndex;  // Currently selected time index
-  List<Map<String, String>> savedSchedules = []; // List of saved route-time pairs
-  int? hoveredScheduleIndex; // Index for currently hovered schedule (for tooltip display)
+  int? selectedRouteIndex;
+  int? selectedTimeIndex;
+  List<Map<String, String>> savedSchedules = [];
+
+  int? tappedScheduleIndex; // index of tapped calendar icon
 
   @override
   Widget build(BuildContext context) {
@@ -52,20 +50,25 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.chevron_left, color: Colors.black, size: 32),
-          onPressed: () => Navigator.pop(context), // Navigate back
+          onPressed: () => Navigator.pop(context),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         title: const Text("Schedule", style: TextStyle(color: Colors.black)),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          // Hide popup when tapping outside
+          if (tappedScheduleIndex != null) {
+            setState(() => tappedScheduleIndex = null);
+          }
+        },
         child: Stack(
           children: [
             ListView(
               children: [
-                // Route Selection Section
                 _buildSectionHeader("Route"),
                 const SizedBox(height: 24),
                 SelectionChips(
@@ -77,7 +80,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Time Selection Section
                 _buildSectionHeader("Time"),
                 const SizedBox(height: 24),
                 SelectionChips(
@@ -89,41 +91,98 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Saved Daily Schedules
                 const Text("Daily", style: TextStyle(fontSize: 16)),
                 const SizedBox(height: 10),
-                SavedSchedulesVisual(
-                  savedSchedules: savedSchedules,
-                  hoveredIndex: hoveredScheduleIndex,
-                  onHoverChange: (index) {
-                    setState(() => hoveredScheduleIndex = index);
-                  },
+
+                // Visual display with calendar icon, route, and time, with delete option on tap
+                Wrap(
+                  spacing: 12,
+                  children: List.generate(savedSchedules.length, (index) {
+                    final schedule = savedSchedules[index];
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          tappedScheduleIndex = tappedScheduleIndex == index ? null : index;
+                        });
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12), // Add top and bottom margin
+                        child: Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.black12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              child: Column(
+                                children: [
+                                  const Icon(Icons.calendar_month, size: 28),
+                                  Text(
+                                    schedule['route'] ?? '',
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    schedule['time'] ?? '',
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (tappedScheduleIndex == index)
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(16),
+                                    onTap: () {
+                                      setState(() {
+                                        savedSchedules.removeAt(index);
+                                        tappedScheduleIndex = null;
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: const Icon(Icons.delete, color: Colors.white, size: 18),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
                 ),
                 const SizedBox(height: 24),
 
-                // Save Button
                 _buildSaveButton(),
                 const SizedBox(height: 24),
 
-                // Weekly Booking Section (visual representation)
                 WeeklyBookingSection(),
               ],
             ),
 
-            // Tooltip displayed when hovering over a saved schedule
-            if (hoveredScheduleIndex != null)
-              ScheduleTooltipWidget(
-                schedule: savedSchedules[hoveredScheduleIndex!],
-                position: _calculateTooltipPosition(context, hoveredScheduleIndex!),
-              ),
+            // No tooltip popup
           ],
         ),
       ),
     );
   }
 
-  /// Builds a styled section header with optional weekly icon
-  Widget _buildSectionHeader(String label, {bool isWeekly = false}) {
+  Widget _buildSectionHeader(String label) {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -133,25 +192,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: Colors.black),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isWeekly)
-              const Icon(Icons.bookmark, size: 18, color: Colors.white),
-            if (isWeekly) const SizedBox(width: 6),
-            Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
-          ],
-        ),
+        child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
       ),
     );
   }
 
-  /// Builds a save button that saves selected route/time if both are selected
   Widget _buildSaveButton() {
     return ElevatedButton(
       onPressed: (selectedRouteIndex != null && selectedTimeIndex != null)
           ? _saveDailySchedule
-          : null, // Disabled if selection incomplete
+          : null,
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.black,
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -162,25 +212,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  /// Saves a new schedule if it doesn't already exist
   void _saveDailySchedule() {
     final newRoute = routes[selectedRouteIndex!];
     final newTime = times[selectedTimeIndex!];
 
-    // Check for duplicate
-    final isDuplicate = savedSchedules.any(
-      (s) => s['route'] == newRoute && s['time'] == newTime,
-    );
+    final isDuplicate =
+        savedSchedules.any((s) => s['route'] == newRoute && s['time'] == newTime);
 
     if (isDuplicate) {
-      // Show feedback if already saved
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This combination already exists')),
       );
       return;
     }
 
-    // Save new schedule and reset selections
     setState(() {
       savedSchedules.add({'route': newRoute, 'time': newTime});
       selectedRouteIndex = null;
@@ -188,11 +233,5 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
   }
 
-  /// Calculates the position of the tooltip based on index
-  Offset _calculateTooltipPosition(BuildContext context, int index) {
-    // Determines approximate x, y coordinates for tooltip
-    final double y = 320.0 + (index ~/ 3) * 40.0;
-    final double x = 16.0 + (index % 3) * 44.0;
-    return Offset(x, y);
-  }
 }
+

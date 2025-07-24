@@ -6,20 +6,20 @@ class SavedSchedulesVisual extends StatelessWidget {
   /// A list of saved schedules, where each schedule is represented as a map.
   final List<Map<String, String>> savedSchedules;
 
-  /// The index of the schedule currently being hovered over.
-  /// If no schedule is hovered, it is null.
-  final int? hoveredIndex;
+  /// The index of the schedule currently being tapped.
+  /// If no schedule is tapped, it is null.
+  final int? tappedIndex;
 
-  /// A callback function that notifies when the hover state changes.
-  /// It receives the index of the hovered schedule or null if none.
-  final Function(int?) onHoverChange;
+  /// A callback function that notifies when a schedule is tapped.
+  /// It receives the index of the tapped schedule.
+  final Function(int) onTap;
 
   /// Constructor for the SavedSchedulesVisual widget.
   const SavedSchedulesVisual({
     super.key,
     required this.savedSchedules,
-    required this.hoveredIndex,
-    required this.onHoverChange,
+    required this.tappedIndex,
+    required this.onTap,
   });
 
   @override
@@ -28,21 +28,44 @@ class SavedSchedulesVisual extends StatelessWidget {
       // Spacing between each icon in the wrap layout.
       spacing: 12,
       // Generate a list of widgets based on the number of saved schedules.
-      children: List.generate(savedSchedules.length, (index) {
-        return MouseRegion(
-          // When the mouse enters this icon region, call onHoverChange with the current index.
-          onEnter: (_) => onHoverChange(index),
-          // When the mouse exits the icon region, call onHoverChange with null.
-          onExit: (_) => onHoverChange(null),
-          // The child widget displays a calendar icon.
-          child: Icon(
-            Icons.calendar_month,
-            size: 32,
-            // Conditionally change the icon's color based on whether it is hovered.
-            color: hoveredIndex == index ? Colors.blue : Colors.black,
+      children: savedSchedules.asMap().entries.map((entry) {
+        final idx = entry.key;
+        final schedule = entry.value;
+        final isTapped = tappedIndex == idx;
+        return GestureDetector(
+          // When the icon is tapped, call onTap with the current index.
+          onTap: () => onTap(idx),
+          child: Container(
+            decoration: BoxDecoration(
+              // Change the background color if the icon is tapped.
+              color: isTapped ? Colors.black : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.black12),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Column(
+              children: [
+                const Icon(Icons.calendar_month, size: 28),
+                Text(
+                  schedule['route'] ?? '',
+                  style: TextStyle(
+                    // Change the text color if the icon is tapped.
+                    color: isTapped ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  schedule['time'] ?? '',
+                  style: TextStyle(
+                    // Change the text color if the icon is tapped.
+                    color: isTapped ? Colors.white : Colors.black,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
-      }),
+      }).toList(),
     );
   }
 }

@@ -30,7 +30,7 @@ class WeeklyBookingSection extends StatelessWidget {
             ),
           ),
 
-          // Button content: text centered horizontally
+          // Button content: text centered horizontally, with chevron_right icon
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -38,7 +38,8 @@ class WeeklyBookingSection extends StatelessWidget {
                 "Weekly Schedule",
                 style: TextStyle(color: Colors.white, fontSize: 16), // White text
               ),
-              SizedBox(width: 8), // Extra space (could be placeholder for icon if added)
+              SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: Colors.white, size: 24),
             ],
           ),
         ),

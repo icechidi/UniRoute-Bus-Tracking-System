@@ -31,50 +31,52 @@ class ScheduleTooltipWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Tooltip widget that shows the schedule information
+    final screenWidth = MediaQuery.of(context).size.width;
+    double left = position.dx - 20;
+    const double boxWidth = 200;
+    // If the box would overflow to the right, shift it left
+    if (left + boxWidth > screenWidth) {
+      left = screenWidth - boxWidth - 16; // 16px margin from right edge
+      if (left < 0) left = 8; // Ensure not off the left edge
+    }
     final tooltip = Positioned(
-      // Adjust position depending on dark mode
-      left: darkMode ? position.dx - 100 : position.dx,
-      top: darkMode ? position.dy - 120 : position.dy,
+      left: left,
+      top: position.dy - 70,
       child: Material(
         elevation: 6,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          width: darkMode ? 200 : null, // Fixed width in dark mode
+          width: 200,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: darkMode ? Colors.black87 : Colors.white,
+            color: Colors.black,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: darkMode
-                ? null // No shadow in dark mode
-                : [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(10),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(30),
+                blurRadius: 10,
+                spreadRadius: 2,
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Display the route information
               Text(
                 'Route: ${schedule['route'] ?? ''}',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
-                  color: darkMode ? Colors.white : Colors.black,
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(height: 4),
-              // Display the time information
               Text(
                 'Time: ${schedule['time'] ?? ''}',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
-                  color: darkMode ? Colors.white : Colors.black,
+                  color: Colors.white,
                 ),
               ),
-              // Optional delete button, shown if onDelete callback is provided
               if (onDelete != null)
                 Align(
                   alignment: Alignment.topRight,
@@ -95,7 +97,7 @@ class ScheduleTooltipWidget extends StatelessWidget {
         children: [
           // Full screen dark overlay
           Positioned.fill(
-            child: Container(color: Colors.black.withOpacity(0.3)),
+            child: Container(color: Colors.black.withValues(alpha: 0.3)),
           ),
           // Tooltip on top
           tooltip,

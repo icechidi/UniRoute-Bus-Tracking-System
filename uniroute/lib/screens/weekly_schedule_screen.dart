@@ -110,7 +110,15 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScheduleScreen()));
         break;
       case 2:
-        // TODO: Implement navigation to profile screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text("User Profile")),
+              body: const Center(child: Text("User Profile Details Here")),
+            ),
+          ),
+        );
         break;
     }
   }
@@ -132,11 +140,12 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
         ),
         title: const Text("Weekly", style: TextStyle(color: Colors.black)),
       ),
-      body: GestureDetector(
-        onTap: () => setState(() => hoveredSchedule = null), // Hide tooltip on tap
-        child: Stack(
-          children: [
-            Column(
+      body: Stack(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => setState(() => hoveredSchedule = null),
+            child: Column(
               children: [
                 // Booking header
                 Padding(
@@ -193,16 +202,16 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
                 BottomNav(currentIndex: 1, onTap: _onBottomNavTapped),
               ],
             ),
+          ),
 
-            // Tooltip overlay when a schedule entry is hovered
-            if (hoveredSchedule != null && tooltipOffset != null)
-              ScheduleTooltipWidget(
-                schedule: hoveredSchedule!,
-                position: tooltipOffset!,
-                onDelete: () => _deleteSchedule(hoveredDay!, hoveredSchedule!),
-              ),
-          ],
-        ),
+          // Tooltip overlay when a schedule entry is hovered
+          if (hoveredSchedule != null && tooltipOffset != null)
+            ScheduleTooltipWidget(
+              schedule: hoveredSchedule!,
+              position: tooltipOffset!,
+              onDelete: () => _deleteSchedule(hoveredDay!, hoveredSchedule!),
+            ),
+        ],
       ),
     );
   }
