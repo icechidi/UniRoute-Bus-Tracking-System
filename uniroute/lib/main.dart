@@ -1,122 +1,377 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(BusTrackerApp());
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class BusTrackerApp extends StatelessWidget {
+  const BusTrackerApp({Key? key}) : super(key: key);
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'UniBus Tracker',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const StudentScheduleScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class Reminder {
+  final String route;
+  final List<String> departureTimes;
+  final TimeOfDay notificationTime;
+  final List<int> repeatDays;
+  final DateTime? endDate;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Reminder({
+    required this.route,
+    required this.departureTimes,
+    required this.notificationTime,
+    required this.repeatDays,
+    required this.endDate,
+  });
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class StudentScheduleScreen extends StatefulWidget {
+  const StudentScheduleScreen({Key? key}) : super(key: key);
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  @override
+  StudentScheduleScreenState createState() => StudentScheduleScreenState();
+}
+
+class StudentScheduleScreenState extends State<StudentScheduleScreen> {
+  String? _selectedRoute;
+  List<String> _selectedDepartureTimes = [];
+  TimeOfDay? _notificationTime;
+  DateTime? _endDate;
+  List<bool> _selectedDays = List.filled(7, false);
+  final List<Reminder> _reminders = [];
+  int? _editingIndex;
+
+  final List<String> _routes = [
+    'Lefkosa - Hamitköy',
+    'Lefkosa - Honda',
+    'Gönyeli',
+    'Güzelyurt'
+  ];
+
+  final List<String> _departureTimes = [
+    '11:45 AM',
+    '12:45 PM',
+    '1:45 PM',
+    '3:45 PM',
+    '5:30 PM'
+  ];
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      appBar: AppBar(title: Text('Bus Schedule Reminder')),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSectionHeader('ROUTE INFORMATION'),
+            _buildDropdown(
+              value: _selectedRoute,
+              hint: 'Select a route',
+              items: _routes,
+              onChanged: (value) => setState(() => _selectedRoute = value),
             ),
+            SizedBox(height: 24),
+            _buildSectionHeader('DEPARTURE TIME(S)'),
+            ..._departureTimes.map((time) => _buildTimeOption(time)),
+            SizedBox(height: 24),
+            if (_selectedRoute != null && _selectedDepartureTimes.isNotEmpty) ...[
+              _buildSectionHeader('REMINDER SETTINGS'),
+              _buildNotificationTimePicker(),
+              SizedBox(height: 16),
+              _buildDaySelector(),
+              SizedBox(height: 16),
+              _buildEndDateSelector(),
+              SizedBox(height: 24),
+              _buildSaveButton(),
+            ],
+            _buildSectionHeader('YOUR REMINDERS'),
+            _buildReminderList(),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        title,
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+      ),
+    );
+  }
+
+  Widget _buildDropdown({
+    required String? value,
+    required String hint,
+    required List<String> items,
+    required Function(String?) onChanged,
+  }) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      decoration: InputDecoration(
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      ),
+      hint: Text(hint),
+      items: items.map((route) => DropdownMenuItem(
+        value: route,
+        child: Text(route),
+      )).toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildTimeOption(String time) {
+    final isSelected = _selectedDepartureTimes.contains(time);
+    return ListTile(
+      title: Text(time),
+      leading: Checkbox(
+        value: isSelected,
+        onChanged: (value) {
+          setState(() {
+            if (value == true) {
+              _selectedDepartureTimes.add(time);
+            } else {
+              _selectedDepartureTimes.remove(time);
+            }
+          });
+        },
+      ),
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedDepartureTimes.remove(time);
+          } else {
+            _selectedDepartureTimes.add(time);
+          }
+        });
+      },
+    );
+  }
+
+  Widget _buildNotificationTimePicker() {
+    return ListTile(
+      title: Text('Notification Time'),
+      subtitle: Text(_notificationTime?.format(context) ?? 'Not set'),
+      trailing: Icon(Icons.access_time),
+      onTap: () async {
+        final time = await showTimePicker(
+          context: context,
+          initialTime: _notificationTime ?? TimeOfDay.now(),
+        );
+        if (time != null) setState(() => _notificationTime = time);
+      },
+    );
+  }
+
+  Widget _buildDaySelector() {
+    const dayAbbreviations = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Repeat on:', style: TextStyle(fontWeight: FontWeight.bold)),
+        SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(7, (index) {
+            return GestureDetector(
+              onTap: () => setState(() => _selectedDays[index] = !_selectedDays[index]),
+              child: CircleAvatar(
+                backgroundColor: _selectedDays[index] ? Colors.blue : Colors.grey[200],
+                child: Text(dayAbbreviations[index],
+                    style: TextStyle(
+                      color: _selectedDays[index] ? Colors.white : Colors.black)),
+              ),
+            );
+          }),
+        ),
+        SizedBox(height: 8),
+        Text(
+          _selectedDays.asMap().entries
+              .where((e) => e.value)
+              .map((e) => dayNames[e.key])
+              .join(', '),
+          style: TextStyle(fontStyle: FontStyle.italic),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEndDateSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Repeat until: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(_endDate != null
+                ? DateFormat('MMM d, y').format(_endDate!)
+                : 'No end date'),
+            Spacer(),
+            TextButton(
+              child: Text(_endDate == null ? 'Set End Date' : 'Change'),
+              onPressed: () => _selectEndDate(context),
+            ),
+            if (_endDate != null)
+              TextButton(
+                child: Text('Clear', style: TextStyle(color: Colors.red)),
+                onPressed: () => setState(() => _endDate = null),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _selectEndDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate ?? DateTime.now().add(Duration(days: 30)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime(DateTime.now().year + 5),
+    );
+    if (picked != null) setState(() => _endDate = picked);
+  }
+
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        child: Text(_editingIndex == null ? 'Save Reminder' : 'Update Reminder'),
+        onPressed: () {
+          if (_selectedRoute == null ||
+              _selectedDepartureTimes.isEmpty ||
+              _notificationTime == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Please fill all required fields')));
+            return;
+          }
+
+          final reminder = Reminder(
+            route: _selectedRoute!,
+            departureTimes: [..._selectedDepartureTimes],
+            notificationTime: _notificationTime!,
+            repeatDays: _selectedDays.asMap().entries.where((e) => e.value).map((e) => e.key).toList(),
+            endDate: _endDate,
+          );
+
+          setState(() {
+            if (_editingIndex == null) {
+              _reminders.add(reminder);
+            } else {
+              _reminders[_editingIndex!] = reminder;
+              _editingIndex = null;
+            }
+            _resetForm();
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Reminder saved successfully')));
+        },
+      ),
+    );
+  }
+
+  void _resetForm() {
+    _selectedRoute = null;
+    _selectedDepartureTimes.clear();
+    _notificationTime = null;
+    _selectedDays = List.filled(7, false);
+    _endDate = null;
+  }
+
+  Widget _buildReminderList() {
+    if (_reminders.isEmpty) return Text("No reminders yet.");
+
+    return Column(
+      children: _reminders.asMap().entries.map((entry) {
+        final i = entry.key;
+        final reminder = entry.value;
+        final days = reminder.repeatDays
+            .map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d])
+            .join(', ');
+        final endDate = reminder.endDate != null
+            ? DateFormat('MMM d, y').format(reminder.endDate!)
+            : 'None';
+
+        return Card(
+          margin: EdgeInsets.only(bottom: 16),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(reminder.route,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                SizedBox(height: 8),
+                Row(children: [
+                  Icon(Icons.directions_bus, size: 16),
+                  SizedBox(width: 8),
+                  Text('Departure(s): ${reminder.departureTimes.join(', ')}'),
+                ]),
+                Row(children: [
+                  Icon(Icons.notifications, size: 16),
+                  SizedBox(width: 8),
+                  Text('Notify at: ${reminder.notificationTime.format(context)}'),
+                ]),
+                Row(children: [
+                  Icon(Icons.calendar_today, size: 16),
+                  SizedBox(width: 8),
+                  Text('Days: $days'),
+                ]),
+                Row(children: [
+                  Icon(Icons.event_available, size: 16),
+                  SizedBox(width: 8),
+                  Text('Ends: $endDate'),
+                ]),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      child: Text('Edit'),
+                      onPressed: () {
+                        setState(() {
+                          _selectedRoute = reminder.route;
+                          _selectedDepartureTimes = [...reminder.departureTimes];
+                          _notificationTime = reminder.notificationTime;
+                          _selectedDays = List.generate(7,
+                              (index) => reminder.repeatDays.contains(index));
+                          _endDate = reminder.endDate;
+                          _editingIndex = i;
+                        });
+                      },
+                    ),
+                    TextButton(
+                      child: Text('Delete', style: TextStyle(color: Colors.red)),
+                      onPressed: () {
+                        setState(() {
+                          _reminders.removeAt(i);
+                          if (_editingIndex == i) _editingIndex = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
