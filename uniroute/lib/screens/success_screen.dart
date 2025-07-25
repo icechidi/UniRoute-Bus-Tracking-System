@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'student_login_screen.dart';
+import 'settings_screen.dart'; // Make sure this file exists and the screen is defined
 
 class SuccessScreen extends StatefulWidget {
   final String? title;
@@ -24,7 +26,6 @@ class _SuccessScreenState extends State<SuccessScreen> {
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
 
-      // Navigate to StudentLoginScreen and remove all previous routes
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const StudentLoginScreen()),
         (Route<dynamic> route) => false,
@@ -48,6 +49,20 @@ class _SuccessScreenState extends State<SuccessScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.black87),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
+      ),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

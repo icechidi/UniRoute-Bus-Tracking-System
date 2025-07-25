@@ -18,6 +18,7 @@ dependencies:
   firebase_auth: ^5.0.0
   cloud_firestore: ^5.6.11
   firebase_crashlytics: ^4.3.9  # For crash reporting
+  firebase_storage: ^12.4.10
 
   # 🔐 Social Sign-In
   google_sign_in: ^6.1.0
@@ -28,11 +29,15 @@ dependencies:
 
   # 💾 Local Storage
   shared_preferences: ^2.5.3
+  hive: ^2.1.0  # Lightweight local database
 
   # 🧾 UI Buttons & Forms
   flutter_signin_button: ^2.0.0
   intl_phone_field: ^3.2.0  # Phone input with formatting
   country_picker: ^2.0.20  # For "Choose Country"
+  image_picker: ^0.8.7+3  # Image selection for profile pictures
+  cached_network_image: ^3.2.0  # Caching images for better performance
+
 
 
   # 🌐 Localization
@@ -41,6 +46,8 @@ dependencies:
   http: 1.4.0
   email_validator: ^2.0.1  # Email validation
   url_launcher: ^6.3.2 # Open URLs in browser
+  logging: ^1.1.0
+  js: ^0.6.7
 
   # 🎨 Animations & Styling
   lottie: ^3.1.0  # Success animation

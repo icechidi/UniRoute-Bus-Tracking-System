@@ -94,17 +94,20 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   String? _validateStudentId(String? value) {
     final val = value?.trim() ?? '';
     if (val.isEmpty) return "student_id_required".tr();
-    if (val.length != _studentIdLength)
+    if (val.length != _studentIdLength) {
       return "student_id_must_be_8_digits".tr();
-    if (!val.startsWith(_studentIdPrefix))
+    }
+    if (!val.startsWith(_studentIdPrefix)) {
       return "student_id_must_start_with_3".tr();
+    }
     if (!RegExp(r'^\d+$').hasMatch(val)) return "student_id_numbers_only".tr();
     return null;
   }
 
   String? _validateRequired(String? value, String fieldName) {
-    if (value == null || value.trim().isEmpty)
+    if (value == null || value.trim().isEmpty) {
       return '$fieldName ${"is_required".tr()}';
+    }
     return null;
   }
 
@@ -113,8 +116,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     if (trimmed.isEmpty) return '$fieldName ${"is_required".tr()}';
     if (trimmed.length < 2) return '$fieldName ${"min_length_2".tr()}';
     if (trimmed.length > 50) return '$fieldName ${"max_length_50".tr()}';
-    if (!RegExp(r"^[a-zA-ZÀ-ÿ\s\-']+$").hasMatch(trimmed))
+    if (!RegExp(r"^[a-zA-ZÀ-ÿ\s\-']+$").hasMatch(trimmed)) {
       return '$fieldName ${"invalid_characters".tr()}';
+    }
     return null;
   }
 
@@ -123,12 +127,15 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     if (trimmed.isEmpty) return "username_required".tr();
     if (trimmed.length < _minUsernameLength) return "username_min_length".tr();
     if (trimmed.length > _maxUsernameLength) return "username_max_length".tr();
-    if (!RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(trimmed))
+    if (!RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(trimmed)) {
       return "username_invalid_characters".tr();
-    if (RegExp(r'[._-]{2,}').hasMatch(trimmed))
+    }
+    if (RegExp(r'[._-]{2,}').hasMatch(trimmed)) {
       return "username_no_consecutive_special".tr();
-    if (RegExp(r'^[._-]|[._-]$').hasMatch(trimmed))
+    }
+    if (RegExp(r'^[._-]|[._-]$').hasMatch(trimmed)) {
       return "username_no_special_start_end".tr();
+    }
     return null;
   }
 
@@ -517,7 +524,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               onPressed: _isSubmitting
                   ? null
                   : () => _selectUsernameSuggestion(suggestion),
-              backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
               labelStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
