@@ -1,79 +1,111 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:easy_localization/easy_localization.dart';
+import 'package:provider/provider.dart'; // Add this import
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
-import 'screens/student_login_screen.dart'; // Add this import
+import 'screens/student_login_screen.dart';
+import 'constants.dart';
+import 'utils/theme_mode_notifier.dart'; // Your notifier class
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  bool initializationError = false;
+  String? initializationError;
 
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    await EasyLocalization.ensureInitialized();
   } catch (e) {
-    debugPrint("Initialization failed: $e");
-    initializationError = true;
+    debugPrint("${AppConstants.initializationFailed}: $e");
+    initializationError = e.toString();
   }
 
   runApp(
-    EasyLocalization(
-      supportedLocales: const [Locale('en'), Locale('tr')],
-      path: 'assets/lang',
-      fallbackLocale: const Locale('en'),
+    ChangeNotifierProvider(
+      create: (_) => ThemeModeNotifier(),
       child: MyApp(initializationError: initializationError),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  final bool initializationError;
+  final String? initializationError;
 
-  const MyApp({super.key, required this.initializationError});
+  const MyApp({super.key, this.initializationError});
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = context.watch<ThemeModeNotifier>().themeMode;
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'UniRoute',
+      themeMode: themeMode, // <-- Apply theme mode here
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        brightness: Brightness.light,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      locale: context.locale,
-      supportedLocales: context.supportedLocales,
-      localizationsDelegates: context.localizationDelegates,
-      home: initializationError
-          ? _InitializationErrorScreen()
+      home: initializationError != null
+          ? _InitializationErrorScreen(error: initializationError!)
           : const SplashScreen(),
       routes: {
-        '/login': (context) => const StudentLoginScreen(), // Add this route
+        '/login': (context) => const StudentLoginScreen(),
       },
     );
   }
 }
 
 class _InitializationErrorScreen extends StatelessWidget {
+  final String error;
+
+  const _InitializationErrorScreen({required this.error});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 20),
-            Text('initialization_error'.tr()),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => main(),
-              child: Text('retry'.tr()),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 20),
+              const Text(
+                AppConstants.initializationErrorTitle,
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                error,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.refresh),
+                label: const Text(AppConstants.retry),
+                onPressed: () {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => const SplashScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

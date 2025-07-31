@@ -1,9 +1,8 @@
-// email_verification_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../widgets/common_widgets.dart';
 import 'complete_profile_screen.dart';
 
@@ -100,8 +99,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
-      title: "verify_email".tr(),
-      subtitle: "verification_sent_to".tr(),
+      title: "Verify Email",
+      subtitle: "Verification email sent to",
       child: Column(
         children: [
           const SizedBox(height: 20),
@@ -115,7 +114,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           ),
           const SizedBox(height: 32),
           Text(
-            "check_inbox_instructions".tr(),
+            "Please check your inbox and click the verification link",
             style: GoogleFonts.poppins(),
             textAlign: TextAlign.center,
           ),
@@ -143,9 +142,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                     )
                   : Text(
                       _resendCooldown > 0
-                          ? "resend_in_seconds"
-                              .tr(args: [_resendCooldown.toString()])
-                          : "resend_email".tr(),
+                          ? "Resend in $_resendCooldown seconds"
+                          : "Resend Email",
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         color: Colors.white,
@@ -158,7 +156,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              "use_different_email".tr(),
+              "Use different email",
               style: GoogleFonts.poppins(decoration: TextDecoration.underline),
             ),
           ),

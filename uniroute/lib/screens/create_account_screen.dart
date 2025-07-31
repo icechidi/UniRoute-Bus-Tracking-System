@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'dart:async';
 
 import '../auth_services.dart';
 import '../widgets/common_widgets.dart';
 import '../utils/validators.dart';
+import '../constants.dart';
 import 'email_verification_screen.dart';
 import 'student_login_screen.dart';
 
@@ -30,12 +29,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   bool _isLoading = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
-  bool _acceptTerms = false;
 
   // Debounce timer for email validation
   Timer? _emailDebounceTimer;
   bool _isEmailChecking = false;
   String? _emailError;
+  String? _generalError;
 
   @override
   void dispose() {
@@ -44,6 +43,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     _confirmPasswordController.dispose();
     _emailDebounceTimer?.cancel();
     super.dispose();
+  }
+
+  void _clearErrors() {
+    setState(() {
+      _generalError = null;
+    });
   }
 
   void _onEmailChanged(String email) {
@@ -74,7 +79,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
       setState(() {
         _isEmailChecking = false;
-        _emailError = methods.isNotEmpty ? 'email_already_in_use'.tr() : null;
+        _emailError = methods.isNotEmpty ? 'Email is already in use' : null;
       });
     } catch (e) {
       if (mounted) {
@@ -87,13 +92,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Future<void> _createAccount() async {
+    _clearErrors();
+
     if (!_formKey.currentState!.validate()) return;
-    if (!_acceptTerms) {
-      _showSnackBar('accept_terms_to_continue'.tr(), Colors.orange);
-      return;
-    }
     if (_emailError != null) {
-      _showSnackBar(_emailError!, Colors.red);
+      setState(() {
+        _generalError = _emailError!;
+      });
       return;
     }
 
@@ -111,7 +116,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       if (user == null) throw Exception("User creation failed");
 
       // Create user document
-      await FirebaseFirestore.instance.collection('users').doc(email).set({
+      await FirebaseFirestore.instance
+          .collection(AppConstants.usersCollection)
+          .doc(email)
+          .set({
         'email': email,
         'uid': user.uid,
         'email_status': 'unverified',
@@ -134,7 +142,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
     } catch (e) {
-      _showSnackBar('unknown_error_occurred'.tr(), Colors.red);
+      setState(() {
+        _generalError = 'An unknown error occurred';
+      });
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -142,27 +152,17 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   void _handleFirebaseAuthError(FirebaseAuthException e) {
     final message = switch (e.code) {
-      'weak-password' => 'password_too_weak'.tr(),
-      'invalid-email' => 'invalid_email_format'.tr(),
-      'operation-not-allowed' => 'auth_not_allowed'.tr(),
-      'email-already-in-use' => 'email_already_in_use'.tr(),
-      'network-request-failed' => 'network_error'.tr(),
-      _ => 'auth_error_occurred'.tr(),
+      'weak-password' => 'Password is too weak',
+      'invalid-email' => 'Invalid email format',
+      'operation-not-allowed' => 'Authentication not allowed',
+      'email-already-in-use' => 'Email is already in use',
+      'network-request-failed' => 'Network error occurred',
+      _ => 'Authentication error occurred',
     };
 
-    _showSnackBar(message, Colors.red);
-  }
-
-  void _showSnackBar(String message, Color backgroundColor) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: backgroundColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        duration: const Duration(seconds: 4),
-      ),
-    );
+    setState(() {
+      _generalError = message;
+    });
   }
 
   Future<void> _signInWithProvider(
@@ -170,6 +170,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   ) async {
     if (_isLoading) return;
 
+    _clearErrors();
     setState(() => _isLoading = true);
 
     try {
@@ -186,22 +187,76 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar('provider_signin_failed'.tr(), Colors.red);
+        setState(() {
+          _generalError = 'Provider sign-in failed';
+        });
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Widget _buildErrorContainer(String? error) {
+    if (error == null) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppConstants.errorColor.withOpacity(0.1),
+        border: Border.all(
+          color: AppConstants.errorColor.withOpacity(0.3),
+          width: 1,
+        ),
+        borderRadius: BorderRadius.circular(AppConstants.cornerRadius),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline,
+            color: AppConstants.errorColor,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              error,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: AppConstants.errorColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmailField() {
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: _emailController,
         keyboardType: TextInputType.emailAddress,
-        onChanged: _onEmailChanged,
-        decoration: buildInputDecoration('email_hint').copyWith(
-          prefixIcon: Icon(Icons.email_outlined, color: Colors.grey[600]),
+        textInputAction: TextInputAction.next,
+        enabled: !_isLoading,
+        onChanged: (value) {
+          _onEmailChanged(value);
+          _clearErrors();
+        },
+        style: GoogleFonts.poppins(
+          fontSize: 16,
+          color: theme.colorScheme.onSurface,
+        ),
+        decoration: buildInputDecoration('Email@domain.com').copyWith(
+          prefixIcon: Icon(
+            Icons.email_outlined,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
           suffixIcon: _isEmailChecking
               ? const Padding(
                   padding: EdgeInsets.all(12),
@@ -211,7 +266,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 )
-              : _emailError == null && _emailController.text.isNotEmpty
+              : _emailError == null &&
+                      _emailController.text.isNotEmpty &&
+                      AppValidators.email(_emailController.text) == null
                   ? Icon(Icons.check_circle, color: Colors.green[600])
                   : null,
           errorText: _emailError,
@@ -223,19 +280,33 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Widget _buildPasswordField() {
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: _passwordController,
         obscureText: !_showPassword,
-        decoration: buildInputDecoration('password_hint').copyWith(
-          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+        textInputAction: TextInputAction.next,
+        enabled: !_isLoading,
+        onChanged: (_) => _clearErrors(),
+        style: GoogleFonts.poppins(
+          fontSize: 16,
+          color: theme.colorScheme.onSurface,
+        ),
+        decoration: buildInputDecoration('Password').copyWith(
+          prefixIcon: Icon(
+            Icons.lock_outline,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
           suffixIcon: IconButton(
             icon: Icon(
               _showPassword ? Icons.visibility_off : Icons.visibility,
-              color: Colors.grey[600],
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
             ),
-            onPressed: () => setState(() => _showPassword = !_showPassword),
+            onPressed: _isLoading
+                ? null
+                : () => setState(() => _showPassword = !_showPassword),
           ),
         ),
         validator: AppValidators.password,
@@ -245,20 +316,35 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Widget _buildConfirmPasswordField() {
+    final theme = Theme.of(context);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 24),
       child: TextFormField(
         controller: _confirmPasswordController,
         obscureText: !_showConfirmPassword,
-        decoration: buildInputDecoration('confirm_password_hint').copyWith(
-          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+        textInputAction: TextInputAction.done,
+        enabled: !_isLoading,
+        onChanged: (_) => _clearErrors(),
+        onFieldSubmitted: (_) => _createAccount(),
+        style: GoogleFonts.poppins(
+          fontSize: 16,
+          color: theme.colorScheme.onSurface,
+        ),
+        decoration: buildInputDecoration('Re-type Password').copyWith(
+          prefixIcon: Icon(
+            Icons.lock_outline,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
           suffixIcon: IconButton(
             icon: Icon(
               _showConfirmPassword ? Icons.visibility_off : Icons.visibility,
-              color: Colors.grey[600],
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
             ),
-            onPressed: () =>
-                setState(() => _showConfirmPassword = !_showConfirmPassword),
+            onPressed: _isLoading
+                ? null
+                : () => setState(
+                    () => _showConfirmPassword = !_showConfirmPassword),
           ),
         ),
         validator: (value) =>
@@ -268,78 +354,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
-  Widget _buildTermsCheckbox() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Checkbox(
-            value: _acceptTerms,
-            onChanged: (value) => setState(() => _acceptTerms = value ?? false),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          ),
-          Expanded(child: _buildTermsAndPrivacyText()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTermsAndPrivacyText() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Text.rich(
-        TextSpan(
-          text: 'i_agree_to'.tr(),
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            color: Colors.grey[700],
-            height: 1.4,
-          ),
-          children: [
-            const TextSpan(text: " "),
-            TextSpan(
-              text: 'terms_of_service'.tr(),
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.blue,
-                fontWeight: FontWeight.w500,
-                decoration: TextDecoration.underline,
-              ),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  // TODO: Open terms
-                },
-            ),
-            TextSpan(
-              text: " ${'and'.tr()} ",
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.grey[700],
-              ),
-            ),
-            TextSpan(
-              text: 'privacy_policy'.tr(),
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.blue,
-                fontWeight: FontWeight.w500,
-                decoration: TextDecoration.underline,
-              ),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  // TODO: Open privacy
-                },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildCreateAccountButton() {
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       child: ElevatedButton(
@@ -348,9 +365,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+          disabledBackgroundColor:
+              theme.colorScheme.onSurface.withOpacity(0.12),
         ),
         child: _isLoading
             ? const SizedBox(
@@ -362,10 +382,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
               )
             : Text(
-                "continue".tr(),
+                "Continue",
                 style: GoogleFonts.poppins(
                   fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
       ),
@@ -373,70 +393,62 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Widget _buildDivider() {
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       child: Row(
         children: [
-          Expanded(child: Divider(thickness: 1, color: Colors.grey[300])),
+          Expanded(
+            child: Divider(
+              color: theme.colorScheme.outline.withOpacity(0.3),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              "or".tr(),
-              style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600]),
+              "or",
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
             ),
           ),
-          Expanded(child: Divider(thickness: 1, color: Colors.grey[300])),
+          Expanded(
+            child: Divider(
+              color: theme.colorScheme.outline.withOpacity(0.3),
+            ),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSocialButtons() {
-    return Column(
-      children: [
-        _buildSocialButton(
-          text: "continue_google",
-          icon: Image.asset('assets/images/google_logo.png',
-              width: 24, height: 24),
-          onPressed: () => _signInWithProvider(
-            AuthServices.signInWithGoogle,
-          ),
-        ),
-        if (!kIsWeb) ...[
-          const SizedBox(height: 12),
-          _buildSocialButton(
-            text: "continue_apple",
-            icon: const Icon(Icons.apple, color: Colors.white, size: 24),
-            backgroundColor: Colors.black,
-            borderColor: Colors.black,
-            textColor: Colors.white,
-            onPressed: () => _signInWithProvider(
-              AuthServices.signInWithApple,
-            ),
-          ),
-        ],
-      ],
     );
   }
 
   Widget _buildSocialButton({
     required String text,
     required Widget icon,
-    Color backgroundColor = Colors.white,
-    Color borderColor = Colors.grey,
-    Color textColor = Colors.black,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
+    Color? backgroundColor,
+    Color? borderColor,
+    Color? textColor,
   }) {
-    return SizedBox(
+    final theme = Theme.of(context);
+
+    return Container(
       width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
       child: OutlinedButton(
         onPressed: _isLoading ? null : onPressed,
         style: OutlinedButton.styleFrom(
-          backgroundColor: backgroundColor,
+          backgroundColor: backgroundColor ?? theme.colorScheme.surface,
           padding: const EdgeInsets.symmetric(vertical: 16),
-          side: BorderSide(color: borderColor.withOpacity(0.3), width: 1),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          side: BorderSide(
+            color: (borderColor ?? theme.colorScheme.outline).withOpacity(0.2),
+            width: 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           elevation: 0,
         ),
         child: Row(
@@ -445,10 +457,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             icon,
             const SizedBox(width: 12),
             Text(
-              text.tr(),
+              text,
               style: GoogleFonts.poppins(
                 fontSize: 16,
-                color: textColor,
+                color: textColor ?? theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -458,7 +470,75 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
+  Widget _buildSocialButtons() {
+    return Column(
+      children: [
+        _buildSocialButton(
+          text: "Continue with Google",
+          icon: Image.asset('assets/images/google_logo.png',
+              width: 24, height: 24),
+          onPressed: () => _signInWithProvider(
+            AuthServices.signInWithGoogle,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTermsText(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 12,
+      ),
+      child: Text.rich(
+        TextSpan(
+          text: "By clicking continue, you agree to our ",
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            height: 1.4,
+          ),
+          children: [
+            TextSpan(
+              text: "Terms of Service",
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  // TODO: Navigate to terms
+                },
+            ),
+            const TextSpan(text: " and "),
+            TextSpan(
+              text: "Privacy Policy",
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  // TODO: Navigate to privacy
+                },
+            ),
+          ],
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
   Widget _buildLoginLink() {
+    final theme = Theme.of(context);
+
     return Center(
       child: TextButton(
         onPressed: _isLoading
@@ -468,15 +548,17 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   MaterialPageRoute(builder: (_) => const StudentLoginScreen()),
                 ),
         style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
         child: Text(
-          'already_have_account'.tr(),
+          'Already have an account? Sign in',
           style: GoogleFonts.poppins(
-            fontSize: 14,
-            color: Colors.blue,
-            fontWeight: FontWeight.w500,
-            decoration: TextDecoration.underline,
+            fontSize: 16,
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -486,24 +568,28 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
-      title: "create_account".tr(),
-      subtitle: "enter_email_to_signup".tr(),
+      title: "Create an account",
+      subtitle: "Enter your email to sign up for this app",
       child: SingleChildScrollView(
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // General Error Display
+              _buildErrorContainer(_generalError),
+
               _buildEmailField(),
               _buildPasswordField(),
               _buildConfirmPasswordField(),
-              _buildTermsCheckbox(),
               _buildCreateAccountButton(),
               _buildDivider(),
               _buildSocialButtons(),
+              const SizedBox(height: 12),
+              _buildTermsText(context),
               const SizedBox(height: 32),
               _buildLoginLink(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 30),
             ],
           ),
         ),

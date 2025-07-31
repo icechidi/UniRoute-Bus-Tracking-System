@@ -1,11 +1,10 @@
 // common_widgets.dart
 import 'package:flutter/material.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 InputDecoration buildInputDecoration(String hint) {
   return InputDecoration(
-    hintText: hint.tr(),
+    hintText: hint,
     hintStyle: GoogleFonts.poppins(
       color: Colors.grey[600],
       fontSize: 14,

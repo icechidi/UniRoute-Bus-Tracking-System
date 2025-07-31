@@ -1,6 +1,4 @@
-// role_selector_screen.dart
 import 'package:flutter/material.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import 'student_login_screen.dart';
 import 'driver_login_screen.dart';
+import '../constants.dart';
 
 class RoleSelectorScreen extends StatefulWidget {
   const RoleSelectorScreen({super.key});
@@ -19,118 +18,150 @@ class RoleSelectorScreen extends StatefulWidget {
 class _RoleSelectorScreenState extends State<RoleSelectorScreen>
     with SingleTickerProviderStateMixin {
   String? _selectedRole;
-  bool _languageSelected = false;
   bool _isLoading = false;
   late SharedPreferences _prefs;
-
   late AnimationController _animationController;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _opacityAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _initAnimations();
+    _animationController = AnimationController(
+      duration: AppConstants.buttonAnimationDuration,
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 0.98, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOut,
+      ),
+    );
     _initPreferences();
   }
 
-  void _initAnimations() {
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutQuart,
-      ),
-    );
-
-    _opacityAnimation = Tween<double>(
-      begin: 0,
-      end: 1,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-  }
-
   Future<void> _initPreferences() async {
-    _prefs = await SharedPreferences.getInstance();
-    final savedLanguage = _prefs.getString('selected_language_code');
-    final savedRole = _prefs.getString('userRole');
-
-    if (savedLanguage != null) {
-      if (!mounted) return;
-      await context.setLocale(Locale(savedLanguage));
-      setState(() => _languageSelected = true);
-    } else {
-      _animationController.forward();
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      final savedRole = _prefs.getString(AppConstants.roleKey);
+      if (savedRole != null && mounted) {
+        setState(() => _selectedRole = savedRole);
+      }
+    } catch (e) {
+      debugPrint('Error loading preferences: $e');
     }
-
-    if (savedRole != null) {
-      setState(() => _selectedRole = savedRole);
-    }
-  }
-
-  Future<void> _setLanguage(Locale locale) async {
-    setState(() => _languageSelected = true);
-    await _animationController.reverse();
-
-    await Future.wait([
-      _prefs.setString('selected_language_code', locale.languageCode),
-      if (mounted) context.setLocale(locale),
-    ]);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          locale.languageCode == 'tr'
-              ? 'language_set_tr'.tr()
-              : 'language_set_en'.tr(),
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   void _selectRole(String role) {
     HapticFeedback.selectionClick();
+    _animationController.reset();
+    _animationController.forward();
     setState(() => _selectedRole = role);
   }
 
   Future<void> _saveRoleAndContinue() async {
     if (_selectedRole == null || _isLoading) return;
-    setState(() => _isLoading = true);
 
+    setState(() => _isLoading = true);
     try {
-      await _prefs.setString('userRole', _selectedRole!);
+      await _prefs.setString(AppConstants.roleKey, _selectedRole!);
       if (!mounted) return;
 
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => _selectedRole == 'student'
+          builder: (_) => _selectedRole == AppConstants.defaultUserRole
               ? const StudentLoginScreen()
               : const DriverLoginScreen(),
         ),
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Widget _buildRoleCard({
+    required String role,
+    required String title,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedRole == role;
+
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: isSelected ? _scaleAnimation.value : 1.0,
+          child: GestureDetector(
+            onTap: () => _selectRole(role),
+            child: Container(
+              width: 280,
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.black : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: isSelected ? Colors.black : Colors.grey.shade300,
+                  width: 1,
+                ),
+                boxShadow: isSelected
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(4, 4),
+                        ),
+                      ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        icon,
+                        size: 28,
+                        color: isSelected ? Colors.white : Colors.black,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (isSelected)
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -142,253 +173,144 @@ class _RoleSelectorScreenState extends State<RoleSelectorScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  const SizedBox(height: 40),
-                  Image.asset(
-                    'assets/images/bus_logo.png',
-                    width: 180,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.directions_bus,
-                      size: 180,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  RoleButton(
-                    label: 'student',
-                    icon: LucideIcons.graduationCap,
-                    role: 'student',
-                    selectedRole: _selectedRole,
-                    onTap: () => _selectRole('student'),
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(thickness: 1),
-                  const SizedBox(height: 16),
-                  RoleButton(
-                    label: 'driver',
-                    icon: LucideIcons.bus,
-                    role: 'driver',
-                    selectedRole: _selectedRole,
-                    onTap: () => _selectRole('driver'),
-                  ),
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _selectedRole == null || _isLoading
-                          ? null
-                          : _saveRoleAndContinue,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+      backgroundColor: Colors.white, // Set background to white
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 60),
+
+                // Logo
+                Center(
+                  child: Image.asset(
+                    AppConstants.logoPath,
+                    width: 120,
+                    height: 120,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation(Colors.white),
-                            )
-                          : Text(
-                              "continue".tr(),
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                      child: Icon(
+                        Icons.directions_bus,
+                        size: 60,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'by_continuing_you_agree'.tr(),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Title
+                Text(
+                  "Choose Your Role",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                    height: 1.2,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Subtitle
+                Text(
+                  "Select how you'll be using the app",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: Colors.grey.shade600,
+                    height: 1.4,
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Role Cards - keeping original design with centered layout
+                Center(
+                  child: Column(
+                    children: [
+                      _buildRoleCard(
+                        role: AppConstants.defaultUserRole,
+                        title: "Student",
+                        icon: LucideIcons.graduationCap,
+                      ),
+                      Divider(
+                        thickness: 1,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildRoleCard(
+                        role: 'driver',
+                        title: "Driver",
+                        icon: LucideIcons.bus,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                // Continue Button
+                ElevatedButton(
+                  onPressed: _selectedRole == null || _isLoading
+                      ? null
+                      : _saveRoleAndContinue,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                    disabledBackgroundColor: Colors.grey.shade300,
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          "Continue",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Terms Text
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    'By continuing, you agree to our Terms of Service and Privacy Policy',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                       fontSize: 12,
-                      color: Colors.grey[700],
+                      color: Colors.grey.shade600,
+                      height: 1.4,
                     ),
                   ),
-                ],
-              ),
+                ),
+
+                const SizedBox(height: 40),
+              ],
             ),
-          ),
-          if (!_languageSelected)
-            LanguageSelectionModal(
-              slideAnimation: _slideAnimation,
-              opacityAnimation: _opacityAnimation,
-              onLanguageSelected: (locale) => _setLanguage(locale),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class RoleButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final String role;
-  final String? selectedRole;
-  final VoidCallback onTap;
-
-  const RoleButton({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.role,
-    required this.selectedRole,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isSelected = selectedRole == role;
-
-    return Center(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 280,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF8C8C8C) : Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: isSelected
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
-                      blurRadius: 8,
-                      offset: const Offset(4, 4),
-                    ),
-                  ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 28,
-                    color: isSelected ? Colors.white : Colors.black,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    label.tr(),
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : Colors.black,
-                    ),
-                  ),
-                ],
-              ),
-              if (isSelected)
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class LanguageSelectionModal extends StatelessWidget {
-  final Animation<Offset> slideAnimation;
-  final Animation<double> opacityAnimation;
-  final Function(Locale) onLanguageSelected;
-
-  const LanguageSelectionModal({
-    super.key,
-    required this.slideAnimation,
-    required this.opacityAnimation,
-    required this.onLanguageSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.6),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: SlideTransition(
-            position: slideAnimation,
-            child: FadeTransition(
-              opacity: opacityAnimation,
-              child: Container(
-                padding: const EdgeInsets.only(top: 24, bottom: 32),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'select_language'.tr(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    _buildLanguageOption('🇹🇷', 'turkish', const Locale('tr')),
-                    const Divider(height: 1, thickness: 1),
-                    _buildLanguageOption('🇬🇧', 'english', const Locale('en')),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLanguageOption(String flag, String language, Locale locale) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => onLanguageSelected(locale),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-          child: Row(
-            children: [
-              Text(flag, style: const TextStyle(fontSize: 28)),
-              const SizedBox(width: 16),
-              Text(
-                language.tr(),
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
           ),
         ),
       ),

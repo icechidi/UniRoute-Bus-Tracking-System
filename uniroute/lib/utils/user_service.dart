@@ -340,4 +340,84 @@ class UserService {
         (userData['country'] ?? '').isNotEmpty &&
         (userData['student_id'] ?? '').isNotEmpty;
   }
+
+  // --- Language Preferences ---
+
+  static Future<String?> fetchSelectedLanguage() async {
+    try {
+      final userEmail = _auth.currentUser?.email;
+      if (userEmail == null) return null;
+
+      final doc =
+          await _firestore.collection(_usersCollection).doc(userEmail).get();
+      if (doc.exists) {
+        return doc.data()?['selected_language'] as String?;
+      }
+      return null;
+    } catch (e) {
+      debugPrint("Error fetching selected language: $e");
+      return null;
+    }
+  }
+
+  static Future<bool> saveSelectedLanguage({required String language}) async {
+    try {
+      final userEmail = _auth.currentUser?.email;
+      if (userEmail == null) return false;
+
+      await _firestore.collection(_usersCollection).doc(userEmail).update({
+        'selected_language': language,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+
+      return true;
+    } catch (e) {
+      debugPrint("Error saving selected language: $e");
+      return false;
+    }
+  }
+
+// --- Notification Preferences ---
+
+  static Future<Map<String, dynamic>> fetchNotificationSettings() async {
+    try {
+      final userEmail = _auth.currentUser?.email;
+      if (userEmail == null) return {};
+
+      final doc =
+          await _firestore.collection(_usersCollection).doc(userEmail).get();
+      if (doc.exists) {
+        return doc.data()?['notification_settings'] ?? {};
+      }
+      return {};
+    } catch (e) {
+      debugPrint("Error fetching notification settings: $e");
+      return {};
+    }
+  }
+
+  static Future<bool> saveNotificationSettings({
+    required bool isEmailEnabled,
+    required bool isPushEnabled,
+  }) async {
+    try {
+      final userEmail = _auth.currentUser?.email;
+      if (userEmail == null) return false;
+
+      final settings = {
+        'isEmailEnabled': isEmailEnabled,
+        'isPushEnabled': isPushEnabled,
+      };
+
+      await _firestore.collection(_usersCollection).doc(userEmail).update({
+        'notification_settings': settings,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+
+      return true;
+    } catch (e) {
+      debugPrint("Error saving notification settings: $e");
+      return false;
+    }
+  }
 }

@@ -43,11 +43,17 @@ dependencies:
   # 🌐 Localization
   easy_localization: ^3.0.1
   intl: 0.20.2  # Required by easy_localization for formatting
-  http: 1.4.0
+  http: ^1.5.0-beta.2
   email_validator: ^2.0.1  # Email validation
   url_launcher: ^6.3.2 # Open URLs in browser
   logging: ^1.1.0
   js: ^0.6.7
+  google_maps_flutter: ^2.12.3
+  geolocator: ^14.0.2
+  flutter_map: ^8.1.0  # For custom maps
+  google_maps: 
+
+  
 
   # 🎨 Animations & Styling
   lottie: ^3.1.0  # Success animation
@@ -70,4 +76,6 @@ flutter:
   assets:
     - assets/images/  # App logo
     - assets/lang/                # Localization files: en.json, tr.json
-    - assets/animations/              # Success animation: success.json
+    - assets/animations/      # Success animation: success.json
+    - assets/icons/  # Custom icons
+    - assets/map/  # Custom fonts        

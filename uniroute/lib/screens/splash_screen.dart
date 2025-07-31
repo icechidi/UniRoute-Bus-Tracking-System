@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'success_screen.dart';
+import 'home_screen.dart';
 import 'role_selector_screen.dart';
-import 'package:easy_localization/easy_localization.dart';
 import '../auth_services.dart';
+import '../constants.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,99 +16,95 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  static const _minSplashDuration = Duration(seconds: 2);
-  static const _firstLaunchKey = 'isFirstLaunch';
-  static const _transitionDuration = Duration(milliseconds: 300);
-  static const _maxRetries = 3;
-
   bool _showError = false;
   String? _errorMessage;
   int _retryCount = 0;
   Timer? _retryTimer;
+  late final Stopwatch _stopwatch;
 
   @override
   void initState() {
     super.initState();
+    _stopwatch = Stopwatch()..start();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initializeApp());
   }
 
   @override
   void dispose() {
     _retryTimer?.cancel();
+    _stopwatch.stop();
     super.dispose();
   }
 
   Future<void> _initializeApp() async {
-    final stopwatch = Stopwatch()..start();
     try {
       await Future.wait([
         _checkFirstLaunch(),
         _precacheResources(),
+        _checkAuthState(), // Now safe and correct
       ]);
 
-      final user = await _checkAuthState();
-      final remainingTime = _minSplashDuration - stopwatch.elapsed;
-
-      if (remainingTime > Duration.zero) {
-        await Future.delayed(remainingTime);
-      }
-
-      if (!mounted) return;
-      _navigateBasedOnAuth(user);
+      _completeInitialization();
     } catch (e) {
       if (!mounted) return;
       _handleInitializationError(e.toString());
-    } finally {
-      stopwatch.stop();
     }
+  }
+
+  Future<void> _completeInitialization() async {
+    final remainingTime = AppConstants.minSplashDuration - _stopwatch.elapsed;
+    if (remainingTime > Duration.zero) {
+      await Future.delayed(remainingTime);
+    }
+
+    if (!mounted) return;
+    _navigateBasedOnAuth(FirebaseAuth.instance.currentUser);
   }
 
   Future<void> _checkFirstLaunch() async {
     final prefs = await SharedPreferences.getInstance();
-    final isFirstLaunch = prefs.getBool(_firstLaunchKey) ?? true;
-
+    final isFirstLaunch = prefs.getBool(AppConstants.firstLaunchKey) ?? true;
     if (isFirstLaunch) {
-      await prefs.setBool(_firstLaunchKey, false);
+      await prefs.setBool(AppConstants.firstLaunchKey, false);
     }
   }
 
   Future<void> _precacheResources() async {
     try {
       await precacheImage(
-          const AssetImage('assets/images/bus_logo.gif'), context);
+        const AssetImage(AppConstants.busLogoPath),
+        context,
+      );
     } catch (e) {
       debugPrint('Precache error: $e');
     }
   }
 
-  Future<User?> _checkAuthState() async {
-    try {
-      User? user = FirebaseAuth.instance.currentUser;
-
-      if (user == null) {
-        final token = await AuthServices.getStoredToken();
-        final email = await AuthServices.getStoredEmail();
-
-        if (token != null && email != null) {
-          final credential = GoogleAuthProvider.credential(idToken: token);
-          final userCredential =
-              await FirebaseAuth.instance.signInWithCredential(credential);
-          user = userCredential.user;
-        }
-      }
-      return user;
-    } catch (e) {
-      return null;
+  // ✅ Fixed: Removed reliance on getStoredToken/getStoredEmail
+  Future<void> _checkAuthState() async {
+    // Firebase automatically restores the user session
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      return; // Already signed in
     }
+
+    // Optionally check if user wanted to stay signed in
+    final shouldKeepSignedIn = await AuthServices.shouldKeepSignedIn();
+    if (!shouldKeepSignedIn) {
+      return;
+    }
+
+    // Firebase will handle session restore — no need to manually sign in
+    // If user is still null, proceed to login screen
   }
 
   void _navigateBasedOnAuth(User? user) {
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        transitionDuration: _transitionDuration,
+        transitionDuration: AppConstants.transitionDuration,
         pageBuilder: (_, __, ___) =>
-            user != null ? const SuccessScreen() : const RoleSelectorScreen(),
+            user != null ? const HomeScreen() : const RoleSelectorScreen(),
         transitionsBuilder: (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
       ),
@@ -122,11 +118,11 @@ class _SplashScreenState extends State<SplashScreen> {
       _showError = true;
     });
 
-    _retryTimer = Timer(const Duration(seconds: 5), () {
+    _retryTimer = Timer(AppConstants.retryDelay, () {
       if (!mounted) return;
       setState(() => _showError = false);
 
-      if (_retryCount <= _maxRetries) {
+      if (_retryCount <= AppConstants.maxRetries) {
         _initializeApp();
       } else {
         _navigateBasedOnAuth(null);
@@ -142,7 +138,7 @@ class _SplashScreenState extends State<SplashScreen> {
         children: [
           Center(
             child: Image.asset(
-              'assets/images/bus_logo.gif',
+              AppConstants.busLogoPath,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => const Icon(
                 Icons.directions_bus,
@@ -181,25 +177,25 @@ class _ErrorOverlay extends StatelessWidget {
         color: Colors.black54,
         child: Center(
           child: AlertDialog(
-            title: Text('init_error_title'.tr()),
+            title: const Text(AppConstants.initializationErrorTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(error ?? 'Unknown error'),
+                Text(error ?? AppConstants.unknownError),
                 const SizedBox(height: 20),
                 const CircularProgressIndicator(),
                 const SizedBox(height: 10),
-                const Text('Attempting to recover...'),
+                const Text(AppConstants.attemptingRecovery),
               ],
             ),
             actions: [
               TextButton(
-                onPressed: onRetry,
-                child: const Text('Retry Now'),
-              ),
-              TextButton(
                 onPressed: onContinue,
-                child: const Text('Continue Anyway'),
+                child: const Text(AppConstants.continueAnyway),
+              ),
+              ElevatedButton(
+                onPressed: onRetry,
+                child: const Text(AppConstants.retryNow),
               ),
             ],
           ),
