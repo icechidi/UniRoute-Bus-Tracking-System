@@ -10,12 +10,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_maps_flutter: ^2.5.3  # Or latest version
-  geolocator: ^11.0.0
+
+  #google_maps_flutter: ^2.5.3  # Or latest version
+  #geolocator: ^11.0.0
 
 
-  http: ^1.2.1
-  flutter_map: ^6.1.0 # For using OpenStreetMap or other tile providers
+  #http: ^1.2.1
+  #flutter_map: ^6.1.0 # For using OpenStreetMap or other tile providers
   
   # latlong2: ^0.9.0  # For handling latitude and longitude
   # device_preview: ^1.3.1 # For device preview functionality
@@ -63,7 +64,7 @@ dependencies:
   google_maps_flutter: ^2.12.3
   geolocator: ^14.0.2
   flutter_map: ^8.1.0  # For custom maps
-  google_maps: 
+  google_maps: ^8.1.1
 
   
 
@@ -91,6 +92,12 @@ flutter:
     - assets/icons/location_icon.png
     - assets/icons/notification_icon.png
     - assets/icons/user_icon.png
+    - assets/images/  # App logo
+    - assets/lang/                # Localization files: en.json, tr.json
+    - assets/animations/      # Success animation: success.json
+    - assets/icons/  # Custom icons
+    - assets/map/  # Custom fonts        
+
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -118,9 +125,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-  assets:
-    - assets/images/  # App logo
-    - assets/lang/                # Localization files: en.json, tr.json
-    - assets/animations/      # Success animation: success.json
-    - assets/icons/  # Custom icons
-    - assets/map/  # Custom fonts        

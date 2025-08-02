@@ -10,13 +10,9 @@ plugins {
 android {
     namespace = "com.example.uniroute"
     compileSdk = flutter.compileSdkVersion
-<<<<<<< HEAD
-    ndkVersion = "27.0.12077973"
-=======
     ndkVersion = flutter.ndkVersion
     ndkVersion = "27.0.12077973"  // <- Add this line Your other configurations like compileSdk, etc.
 
->>>>>>> main
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
