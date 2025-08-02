@@ -75,16 +75,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Color(0xFF8B5CF6),
+        backgroundColor: const Color(0xFF8B5CF6),
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
+          icon: const Icon(Icons.arrow_back_ios, color: textColor, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Edit Profile',
           style: GoogleFonts.poppins(
-            color: Color.fromARGB(255, 2, 0, 7),
+            color: const Color.fromARGB(255, 2, 0, 7),
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
@@ -98,7 +98,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           children: [
             // Header with gradient background
             _buildHeaderCard(
-                Color.fromARGB(255, 248, 247, 248), textColor, borderColor),
+                const Color.fromARGB(255, 248, 247, 248), textColor, borderColor),
             // Form content with padding
             Padding(
               padding: const EdgeInsets.all(20),
@@ -106,7 +106,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  _buildFormFields(Color.fromARGB(255, 255, 255, 255),
+                  _buildFormFields(const Color.fromARGB(255, 255, 255, 255),
                       textColor, borderColor),
                   const SizedBox(height: 30),
                   _buildSaveButton(),

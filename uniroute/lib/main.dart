@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart'; // Add this import
 import 'firebase_options.dart';
@@ -34,23 +33,12 @@ class MyApp extends StatelessWidget {
   final String? initializationError;
 
   const MyApp({super.key, this.initializationError});
-=======
-import 'screens/home_screen.dart';
-
-void main() {
-  runApp(const BusApp());
-}
-
-class BusApp extends StatelessWidget {
-  const BusApp({super.key});
->>>>>>> main
 
   @override
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeModeNotifier>().themeMode;
 
     return MaterialApp(
-<<<<<<< HEAD
       debugShowCheckedModeBanner: false,
       title: 'UniRoute',
       themeMode: themeMode, // <-- Apply theme mode here
@@ -120,12 +108,6 @@ class _InitializationErrorScreen extends StatelessWidget {
           ),
         ),
       ),
-=======
-      title: 'Bus Route App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const HomeScreen(),
->>>>>>> main
     );
   }
 }

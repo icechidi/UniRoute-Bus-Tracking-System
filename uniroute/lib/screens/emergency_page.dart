@@ -95,7 +95,7 @@ class _EmergencyPageState extends State<EmergencyPage> {
         backgroundColor: backgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
+          icon: const Icon(Icons.arrow_back_ios, color: textColor, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(

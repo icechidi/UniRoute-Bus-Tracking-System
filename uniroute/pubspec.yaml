@@ -10,20 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_maps_flutter: ^2.5.3  # Or latest version
-  geolocator: ^11.0.0
-
-
-  http: ^1.2.1
-  flutter_map: ^6.1.0 # For using OpenStreetMap or other tile providers
-  
-  # latlong2: ^0.9.0  # For handling latitude and longitude
-  # device_preview: ^1.3.1 # For device preview functionality
-
-  # location: ^5.0.3
-  # flutter_dotenv: ^5.2.1 # For loading environment variables from .env files
-  cupertino_icons: ^1.0.8  # iOS-style icons
-  lucide_icons: ^0.257.0  # Lucide icons for modern UI
+ 
 
   # 🔥 Firebase Core & Auth
   firebase_core: ^3.15.1
@@ -49,6 +36,7 @@ dependencies:
   country_picker: ^2.0.20  # For "Choose Country"
   image_picker: ^0.8.7+3  # Image selection for profile pictures
   cached_network_image: ^3.2.0  # Caching images for better performance
+  lucide_icons: ^0.257.0  # Modern icon set
 
 
 
@@ -91,34 +79,7 @@ flutter:
     - assets/icons/location_icon.png
     - assets/icons/notification_icon.png
     - assets/icons/user_icon.png
-  #   - images/a_dot_ham.jpeg
 
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/to/resolution-aware-images
-
-  # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/to/asset-from-package
-
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
-  assets:
     - assets/images/  # App logo
     - assets/lang/                # Localization files: en.json, tr.json
     - assets/animations/      # Success animation: success.json
