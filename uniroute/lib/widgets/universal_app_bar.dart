@@ -40,11 +40,11 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
               ? [
                   GestureDetector(
                     onTap: onProfileTap ?? () {},
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 16),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 16),
                       child: CircleAvatar(
                         radius: 18,
-                        backgroundImage: const AssetImage(
+                        backgroundImage: AssetImage(
                           'assets/images/profile_icon.png',
                         ),
                       ),
