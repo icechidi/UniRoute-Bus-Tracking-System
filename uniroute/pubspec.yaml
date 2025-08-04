@@ -10,8 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8  # iOS-style icons
-  lucide_icons: ^0.257.0  # Lucide icons for modern UI
+ 
 
   # 🔥 Firebase Core & Auth
   firebase_core: ^3.15.1
@@ -37,6 +36,7 @@ dependencies:
   country_picker: ^2.0.20  # For "Choose Country"
   image_picker: ^0.8.7+3  # Image selection for profile pictures
   cached_network_image: ^3.2.0  # Caching images for better performance
+  lucide_icons: ^0.257.0  # Modern icon set
 
 
 
@@ -73,7 +73,13 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/map/maps.jpg
+    - assets/icons/location_icon.png
+    - assets/icons/notification_icon.png
+    - assets/icons/user_icon.png
+
     - assets/images/  # App logo
     - assets/lang/                # Localization files: en.json, tr.json
     - assets/animations/      # Success animation: success.json
