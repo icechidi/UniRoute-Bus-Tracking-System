@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'map_screen.dart';
-import 'schedule_screen.dart';
-import 'settings_screen.dart';
+import 'schedule_screen.dart'; // Create this if needed
+import 'settings_screen.dart'; // Profile/settings
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,15 +15,83 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _screens = [
     const MapScreen(),
-    const ScheduleScreen(),
+    const ScheduleScreen(), // Replace with your screen
     const SettingsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: _screens[_currentIndex], // Just show the screen
+      backgroundColor:
+          Colors.grey[100], // Add background color to see the floating effect
+      extendBody:
+          true, // This allows the body to extend behind the navigation bar
+      body: _screens[_currentIndex],
+      bottomNavigationBar: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+              spreadRadius: 0,
+            ),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: Container(
+          height: 70,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNavItem(0, Icons.location_on, 'Map'),
+              _buildNavItem(1, Icons.schedule, 'Schedule'),
+              _buildNavItem(2, Icons.person, 'Profile'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    bool isSelected = _currentIndex == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isSelected ? Colors.grey[800] : Colors.transparent,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.grey[800]!.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
+        ),
+        child: Icon(
+          icon,
+          color: isSelected ? Colors.white : Colors.grey[600],
+          size: 24,
+        ),
+      ),
     );
   }
 }
