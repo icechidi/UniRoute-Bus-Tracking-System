@@ -50,9 +50,9 @@ dependencies:
   js: ^0.6.7
   google_maps_flutter: ^2.12.3
   geolocator: ^14.0.2
-  flutter_map: ^8.1.0  # For custom maps
-  google_maps: ^8.1.1
-
+  flutter_map: ^8.2.1 # For custom maps
+  latlong2: ^0.9.1
+  location: ^5.0.3
   
 
   # 🎨 Animations & Styling

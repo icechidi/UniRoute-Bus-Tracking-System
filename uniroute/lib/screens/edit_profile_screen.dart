@@ -378,9 +378,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-
             Color.fromARGB(255, 109, 165, 248), // Dark purple
-            Color.fromARGB(255, 62, 30, 247), 
+            Color.fromARGB(255, 62, 30, 247),
           ],
         ),
         borderRadius: BorderRadius.only(
