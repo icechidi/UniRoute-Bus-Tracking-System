@@ -1,129 +1,126 @@
-// auth_services.dart
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// lib/services/auth_services.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthServices {
-  // Constants
+  // Keys
   static const String _keepSignedInKey = 'keep_signed_in';
-  static const String _authTokenKey = 'auth_token';
+  static const String _authTokenKey = 'auth_token'; // in secure storage
   static const String _authEmailKey = 'auth_email';
+  static const String _authUserKey = 'auth_user'; // user JSON in prefs
 
-  // Google Sign-In
-  static Future<UserCredential?> signInWithGoogle() async {
+  // Update this to your Next.js login URL
+  // For Android emulator use 10.0.2.2; for iOS simulator use localhost
+  static const String loginUrl = 'http://10.0.2.2:3000/api/auth/login';
+
+  static final FlutterSecureStorage _secureStorage =
+      const FlutterSecureStorage();
+
+  /// Attempts login using either an email or an identifier (driver ID / username).
+  /// If the identifier contains '@' we send it as `email`, otherwise we send it as `identifier`.
+  /// Expects the server to return either:
+  ///  { "user": { ... }, "token": "..." }
+  /// or { "user": { ... } }
+  static Future<Map<String, dynamic>?> signInWithIdentifier(
+      String identifierOrEmail, String password, bool keepSignedIn) async {
     try {
-      final googleSignIn = GoogleSignIn(
-        clientId: kIsWeb
-            ? '87170443990-f0ev561n5bin8f2mndsm62d0hnlhgdqs.apps.googleusercontent.com'
-            : null,
+      final bool looksLikeEmail = identifierOrEmail.contains('@');
+
+      final body = looksLikeEmail
+          ? {'email': identifierOrEmail, 'password': password}
+          : {'identifier': identifierOrEmail, 'password': password};
+
+      final resp = await http.post(
+        Uri.parse(loginUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(body),
       );
 
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) return null;
+      final respBody = json.decode(resp.body);
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-
-      // Store token for auto-login
-      final token = await userCredential.user?.getIdToken();
-      if (token != null) {
-        await saveAuthData(token, userCredential.user?.email, true);
+      if (resp.statusCode != 200) {
+        final msg = (respBody is Map &&
+                (respBody['message'] ?? respBody['error']) != null)
+            ? (respBody['message'] ?? respBody['error'])
+            : 'Login failed';
+        throw Exception(msg);
       }
 
-      return userCredential;
+      final user = (respBody is Map && respBody['user'] != null)
+          ? Map<String, dynamic>.from(respBody['user'])
+          : null;
+
+      final token = (respBody is Map &&
+              (respBody['token'] ?? respBody['access_token']) != null)
+          ? (respBody['token'] ?? respBody['access_token']) as String
+          : null;
+
+      await _saveAuthData(
+          token, user, looksLikeEmail ? identifierOrEmail : null, keepSignedIn);
+
+      return user;
     } catch (e) {
-      debugPrint("Google sign-in error: $e");
-      return null;
+      debugPrint('signInWithIdentifier error: $e');
+      rethrow;
     }
   }
 
-  // Apple Sign-In
-  static Future<UserCredential?> signInWithApple() async {
-    try {
-      final credential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
-      );
-
-      final oauthCredential = OAuthProvider("apple.com").credential(
-        idToken: credential.identityToken,
-        accessToken: credential.authorizationCode,
-      );
-
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
-
-      // Store token for auto-login
-      final token = await userCredential.user?.getIdToken();
-      if (token != null) {
-        await saveAuthData(token, userCredential.user?.email, true);
-      }
-
-      return userCredential;
-    } catch (e) {
-      debugPrint("Apple sign-in error: $e");
-      return null;
-    }
+  /// Convenience wrapper if you always want to call with an email param name
+  static Future<Map<String, dynamic>?> signInWithEmail(
+      String email, String password, bool keepSignedIn) {
+    return signInWithIdentifier(email, password, keepSignedIn);
   }
 
-  // Email/Password Sign-In
-  static Future<UserCredential?> signInWithEmail(
-      String email, String password, bool keepSignedIn) async {
+  /// Sign out locally and optionally call server logout if you implement it.
+  static Future<void> signOut({String? logoutUrl}) async {
     try {
-      final UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password);
-
-      // Store token for auto-login
-      final token = await userCredential.user?.getIdToken();
-      if (token != null) {
-        await saveAuthData(token, email, keepSignedIn);
+      if (logoutUrl != null) {
+        try {
+          await http.post(Uri.parse(logoutUrl));
+        } catch (e) {
+          debugPrint('Server logout failed: $e');
+        }
       }
-
-      return userCredential;
-    } catch (e) {
-      debugPrint("Email login error: $e");
-      return null;
-    }
-  }
-
-  // Sign out
-  static Future<void> signOut() async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      await GoogleSignIn().signOut();
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_keepSignedInKey);
-      await prefs.remove(_authTokenKey);
       await prefs.remove(_authEmailKey);
+      await prefs.remove(_authUserKey);
+      await _secureStorage.delete(key: _authTokenKey);
     } catch (e) {
-      debugPrint("Sign out error: $e");
+      debugPrint('signOut error: $e');
     }
   }
 
-  // Auth persistence methods
-  static Future<void> saveAuthData(
-      String? token, String? email, bool keepSignedIn) async {
+  static Future<void> _saveAuthData(String? token, Map<String, dynamic>? user,
+      String? email, bool keepSignedIn) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keepSignedInKey, keepSignedIn);
-    if (keepSignedIn && token != null && email != null) {
-      await prefs.setString(_authTokenKey, token);
-      await prefs.setString(_authEmailKey, email);
+
+    if (keepSignedIn) {
+      if (email != null) await prefs.setString(_authEmailKey, email);
+      if (user != null) {
+        try {
+          await prefs.setString(_authUserKey, json.encode(user));
+        } catch (e) {
+          debugPrint('Failed to encode user: $e');
+        }
+      }
+      if (token != null) {
+        await _secureStorage.write(key: _authTokenKey, value: token);
+      } else {
+        // no token returned
+        await _secureStorage.delete(key: _authTokenKey);
+        debugPrint(
+            'Warning: no token returned from server; persistent auth for API calls will not be available.');
+      }
     } else {
-      await prefs.remove(_authTokenKey);
       await prefs.remove(_authEmailKey);
+      await prefs.remove(_authUserKey);
+      await _secureStorage.delete(key: _authTokenKey);
     }
   }
 
@@ -133,8 +130,7 @@ class AuthServices {
   }
 
   static Future<String?> getStoredToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_authTokenKey);
+    return _secureStorage.read(key: _authTokenKey);
   }
 
   static Future<String?> getStoredEmail() async {
@@ -142,6 +138,24 @@ class AuthServices {
     return prefs.getString(_authEmailKey);
   }
 
-  // Get current Firebase user
-  static User? getCurrentUser() => FirebaseAuth.instance.currentUser;
+  static Future<Map<String, dynamic>?> getCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_authUserKey);
+    if (jsonStr == null) return null;
+    try {
+      return Map<String, dynamic>.from(json.decode(jsonStr));
+    } catch (e) {
+      debugPrint('Failed to decode stored user: $e');
+      return null;
+    }
+  }
+
+  /// Headers ready to attach for protected endpoints (includes Authorization if token available)
+  static Future<Map<String, String>> authHeaders() async {
+    final token = await getStoredToken();
+    final headers = {'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty)
+      headers['Authorization'] = 'Bearer $token';
+    return headers;
+  }
 }

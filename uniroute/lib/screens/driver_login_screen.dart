@@ -1,12 +1,13 @@
+// lib/screens/driver_login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/common_widgets.dart';
 import '../utils/validators.dart';
 import '../constants.dart';
-import 'forgot_password_screen.dart';
+import '../auth_services.dart';
 import 'driver_home_screen.dart';
+import 'forgot_password_screen.dart';
 
 class DriverLoginScreen extends StatefulWidget {
   const DriverLoginScreen({super.key});
@@ -25,6 +26,15 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
   bool _keepSignedIn = false;
 
   String? _generalError;
+
+  @override
+  void initState() {
+    super.initState();
+    // optionally prefill keepSignedIn from prefs
+    AuthServices.shouldKeepSignedIn().then((v) {
+      if (mounted) setState(() => _keepSignedIn = v);
+    });
+  }
 
   @override
   void dispose() {
@@ -50,39 +60,35 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
     final password = _passwordController.text;
 
     try {
-      // Query by driver_ID field instead of document ID
-      final query = await FirebaseFirestore.instance
-          .collection('dusers')
-          .where('driver_ID', isEqualTo: driverId)
-          .limit(1)
-          .get();
+      // AuthServices handles whether the input is email or identifier
+      final user = await AuthServices.signInWithIdentifier(
+          driverId, password, _keepSignedIn);
 
-      if (query.docs.isEmpty) {
-        throw Exception('Driver ID not found');
+      if (user == null) {
+        throw Exception('Login failed');
       }
 
-      final doc = query.docs.first;
-      final storedPassword = doc['password'];
-
-      // Validate password
-      if (storedPassword != password) {
-        throw Exception('Incorrect password');
+      // Optionally require role to be 'driver' — server may already enforce this
+      if ((user['role_name'] ?? '') != 'driver') {
+        throw Exception('Only drivers can log in here');
       }
 
-      // Success - Navigate to driver home
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => DriverHomeScreen(
-            driverName: doc
-                .data()['driver_ID'], // or doc.data()['name'] if you add name
+            driverName: user['first_name'] ??
+                user['username'] ??
+                user['email'] ??
+                driverId,
           ),
         ),
       );
     } catch (e) {
       setState(() {
-        _generalError = e.toString().replaceFirst('Exception: ', '');
+        final raw = e.toString();
+        _generalError = raw.replaceFirst('Exception: ', '');
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -91,11 +97,10 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
 
   void _navigateToForgotPassword() {
     if (!mounted) return;
-
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const ForgotPasswordScreen(),
+        builder: (_) => const ForgotPasswordScreen(), // keep your screen
       ),
     );
   }
@@ -144,7 +149,7 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
 
     return AuthScaffold(
       title: "Driver Login",
-      subtitle: "Enter your Driver ID and password",
+      subtitle: "Enter your Driver ID or email and password",
       child: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -153,7 +158,7 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
             children: [
               _buildErrorContainer(_generalError),
 
-              // Driver ID Field
+              // Driver ID / Email Field
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 child: TextFormField(
@@ -161,14 +166,16 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                   keyboardType: TextInputType.text,
                   textInputAction: TextInputAction.next,
                   enabled: !_isLoading,
-                  validator: (value) =>
-                      value == null || value.isEmpty ? 'Enter Driver ID' : null,
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Enter Driver ID or email'
+                      : null,
                   onChanged: (_) => _clearErrors(),
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     color: theme.colorScheme.onSurface,
                   ),
-                  decoration: buildInputDecoration('Driver ID').copyWith(
+                  decoration:
+                      buildInputDecoration('Driver ID or Email').copyWith(
                     prefixIcon: Icon(
                       Icons.badge_outlined,
                       color: theme.colorScheme.onSurface.withOpacity(0.6),
