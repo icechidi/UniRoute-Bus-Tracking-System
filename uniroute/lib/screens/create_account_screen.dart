@@ -7,7 +7,6 @@ import 'package:flutter/gestures.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 
-import '../auth_services.dart';
 import '../widgets/common_widgets.dart';
 import '../utils/validators.dart';
 import '../constants.dart';

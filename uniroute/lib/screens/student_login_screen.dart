@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 
-import '../utils/platform_utils.dart';
 import '../auth_services.dart';
 import '../widgets/common_widgets.dart';
 import '../utils/validators.dart';

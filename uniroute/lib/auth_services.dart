@@ -12,18 +12,12 @@ class AuthServices {
   static const String _authEmailKey = 'auth_email';
   static const String _authUserKey = 'auth_user'; // user JSON in prefs
 
-  // Update this to your Next.js login URL
-  // For Android emulator use 10.0.2.2; for iOS simulator use localhost
-  static const String loginUrl = 'http://10.0.2.2:3000/api/auth/login';
+  // 👇 Replace with your private IP and port
+  // Example: backend machine IP = 192.168.1.50
+  static const String loginUrl = 'http://172.55.4.160:3000/api/auth/login';
 
-  static final FlutterSecureStorage _secureStorage =
-      const FlutterSecureStorage();
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
-  /// Attempts login using either an email or an identifier (driver ID / username).
-  /// If the identifier contains '@' we send it as `email`, otherwise we send it as `identifier`.
-  /// Expects the server to return either:
-  ///  { "user": { ... }, "token": "..." }
-  /// or { "user": { ... } }
   static Future<Map<String, dynamic>?> signInWithIdentifier(
       String identifierOrEmail, String password, bool keepSignedIn) async {
     try {
@@ -68,13 +62,11 @@ class AuthServices {
     }
   }
 
-  /// Convenience wrapper if you always want to call with an email param name
   static Future<Map<String, dynamic>?> signInWithEmail(
       String email, String password, bool keepSignedIn) {
     return signInWithIdentifier(email, password, keepSignedIn);
   }
 
-  /// Sign out locally and optionally call server logout if you implement it.
   static Future<void> signOut({String? logoutUrl}) async {
     try {
       if (logoutUrl != null) {
@@ -112,7 +104,6 @@ class AuthServices {
       if (token != null) {
         await _secureStorage.write(key: _authTokenKey, value: token);
       } else {
-        // no token returned
         await _secureStorage.delete(key: _authTokenKey);
         debugPrint(
             'Warning: no token returned from server; persistent auth for API calls will not be available.');
@@ -150,12 +141,12 @@ class AuthServices {
     }
   }
 
-  /// Headers ready to attach for protected endpoints (includes Authorization if token available)
   static Future<Map<String, String>> authHeaders() async {
     final token = await getStoredToken();
     final headers = {'Content-Type': 'application/json'};
-    if (token != null && token.isNotEmpty)
+    if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
+    }
     return headers;
   }
 }
