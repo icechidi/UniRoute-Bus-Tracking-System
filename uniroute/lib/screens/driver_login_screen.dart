@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/common_widgets.dart';
 import '../utils/validators.dart';
 import '../constants.dart';
-import 'forgot_password_screen.dart';
+import '../auth_services.dart';
 import 'driver_home_screen.dart';
+import 'forgot_password_screen.dart';
 
 class DriverLoginScreen extends StatefulWidget {
   const DriverLoginScreen({super.key});
@@ -27,6 +27,49 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
   String? _generalError;
 
   @override
+  void initState() {
+    super.initState();
+
+    _checkAutoLogin();
+
+    AuthServices.shouldKeepSignedIn().then((v) {
+      if (mounted) setState(() => _keepSignedIn = v);
+    });
+  }
+
+  Future<void> _checkAutoLogin() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final savedUser = await AuthServices.getSavedUser();
+      final keep = await AuthServices.shouldKeepSignedIn();
+
+      if (savedUser != null && keep) {
+        // only allow drivers
+        final roleName = _extractRoleName(savedUser);
+        if (roleName == 'driver') {
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DriverHomeScreen(
+                driver: savedUser, // ✅ pass full driver object
+              ),
+            ),
+          );
+          return;
+        } else {
+          debugPrint('Auto-login aborted: role is $roleName');
+        }
+      }
+    } catch (e) {
+      debugPrint("Auto-login failed: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   void dispose() {
     _driverIdController.dispose();
     _passwordController.dispose();
@@ -34,14 +77,11 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
   }
 
   void _clearErrors() {
-    setState(() {
-      _generalError = null;
-    });
+    setState(() => _generalError = null);
   }
 
   Future<void> _loginWithDriverId() async {
     _clearErrors();
-
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -50,39 +90,32 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
     final password = _passwordController.text;
 
     try {
-      // Query by driver_ID field instead of document ID
-      final query = await FirebaseFirestore.instance
-          .collection('dusers')
-          .where('driver_ID', isEqualTo: driverId)
-          .limit(1)
-          .get();
+      final user = await AuthServices.signInWithIdentifier(
+        driverId,
+        password,
+        _keepSignedIn,
+      );
 
-      if (query.docs.isEmpty) {
-        throw Exception('Driver ID not found');
+      if (user == null) {
+        throw Exception('Login failed');
       }
 
-      final doc = query.docs.first;
-      final storedPassword = doc['password'];
-
-      // Validate password
-      if (storedPassword != password) {
-        throw Exception('Incorrect password');
+      final roleName = _extractRoleName(user);
+      if (roleName != 'driver') {
+        throw Exception('Only drivers can log in here (role: $roleName)');
       }
 
-      // Success - Navigate to driver home
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => DriverHomeScreen(
-            driverName: doc
-                .data()['driver_ID'], // or doc.data()['name'] if you add name
-          ),
+          builder: (_) => DriverHomeScreen(driver: user),
         ),
       );
     } catch (e) {
       setState(() {
-        _generalError = e.toString().replaceFirst('Exception: ', '');
+        final raw = e.toString();
+        _generalError = raw.replaceFirst('Exception: ', '');
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -91,7 +124,6 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
 
   void _navigateToForgotPassword() {
     if (!mounted) return;
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -117,11 +149,8 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.error_outline,
-            color: AppConstants.errorColor,
-            size: 20,
-          ),
+          const Icon(Icons.error_outline,
+              color: AppConstants.errorColor, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -138,13 +167,35 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
     );
   }
 
+  String _extractRoleName(Map<String, dynamic>? user) {
+    if (user == null) return '';
+    final rn = user['role_name'] ?? user['role'];
+    if (rn is String && rn.isNotEmpty) return rn.toLowerCase();
+    if (user['roles'] is List && (user['roles'] as List).isNotEmpty) {
+      final first = (user['roles'] as List)[0];
+      if (first is Map && first['name'] != null) {
+        return first['name'].toString().toLowerCase();
+      }
+      if (first is String) return first.toLowerCase();
+    }
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return AuthScaffold(
       title: "Driver Login",
-      subtitle: "Enter your Driver ID and password",
+      subtitle: "Enter your Driver ID or email and password",
       child: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -153,7 +204,7 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
             children: [
               _buildErrorContainer(_generalError),
 
-              // Driver ID Field
+              // Driver ID / Email
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 child: TextFormField(
@@ -161,14 +212,16 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                   keyboardType: TextInputType.text,
                   textInputAction: TextInputAction.next,
                   enabled: !_isLoading,
-                  validator: (value) =>
-                      value == null || value.isEmpty ? 'Enter Driver ID' : null,
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Enter Driver ID or email'
+                      : null,
                   onChanged: (_) => _clearErrors(),
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     color: theme.colorScheme.onSurface,
                   ),
-                  decoration: buildInputDecoration('Driver ID').copyWith(
+                  decoration:
+                      buildInputDecoration('Driver ID or Email').copyWith(
                     prefixIcon: Icon(
                       Icons.badge_outlined,
                       color: theme.colorScheme.onSurface.withOpacity(0.6),
@@ -177,7 +230,7 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                 ),
               ),
 
-              // Password Field
+              // Password
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 child: TextFormField(
@@ -211,7 +264,7 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                 ),
               ),
 
-              // Keep signed in checkbox
+              // Keep signed in
               Container(
                 margin: const EdgeInsets.only(bottom: 24),
                 child: Row(
@@ -221,11 +274,11 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                       onChanged: _isLoading
                           ? null
                           : (v) => setState(() => _keepSignedIn = v ?? false),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(4),
                       ),
                       activeColor: Colors.black,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     Expanded(
                       child: GestureDetector(
@@ -246,7 +299,7 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                 ),
               ),
 
-              // Login Button
+              // Continue Button
               Container(
                 margin: const EdgeInsets.only(bottom: 24),
                 child: ElevatedButton(
@@ -264,11 +317,11 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                   ),
                   child: _isLoading
                       ? const SizedBox(
-                          height: 20,
                           width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation(Colors.white),
                             strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
                           ),
                         )
                       : Text(
@@ -281,17 +334,10 @@ class _DriverLoginScreenState extends State<DriverLoginScreen> {
                 ),
               ),
 
-              // Forgot Password Button
+              // Forgot Password
               Center(
                 child: TextButton(
                   onPressed: _isLoading ? null : _navigateToForgotPassword,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 24),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
                   child: Text(
                     "Forgot Password?",
                     style: GoogleFonts.poppins(

@@ -18,10 +18,12 @@ dependencies:
   cloud_firestore: ^5.6.11
   firebase_crashlytics: ^4.3.9  # For crash reporting
   firebase_storage: ^12.4.10
+  device_info_plus: ^10.0.1  # For device-specific info
 
   # 🔐 Social Sign-In
   google_sign_in: ^6.1.0
   sign_in_with_apple: ^7.0.1
+  
 
   # 🗂️ State Management
   provider: ^6.1.5
@@ -37,6 +39,7 @@ dependencies:
   image_picker: ^0.8.7+3  # Image selection for profile pictures
   cached_network_image: ^3.2.0  # Caching images for better performance
   lucide_icons: ^0.257.0  # Modern icon set
+  flutter_secure_storage: ^8.0.0
 
 
 

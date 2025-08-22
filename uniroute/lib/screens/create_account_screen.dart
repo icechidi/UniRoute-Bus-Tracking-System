@@ -1,12 +1,12 @@
-// create_account_screen.dart
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/gestures.dart';
+// lib/screens/create_account_screen.dart
 import 'dart:async';
+import 'dart:convert';
 
-import '../auth_services.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+
 import '../widgets/common_widgets.dart';
 import '../utils/validators.dart';
 import '../constants.dart';
@@ -35,6 +35,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   bool _isEmailChecking = false;
   String? _emailError;
   String? _generalError;
+
+  // Backend endpoint to create account - update if needed
+  static const String createUserUrl = 'http://10.0.2.2:3000/api/users';
 
   @override
   void dispose() {
@@ -73,14 +76,28 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     setState(() => _isEmailChecking = true);
 
     try {
-      final methods =
-          await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
+      // Quick availability check by calling your login or users endpoint would risk exposing
+      // info. Here we call the users endpoint to see if that email already exists.
+      // If your GET /api/users does not support query by email, remove this check.
+      final uri = Uri.parse('http://10.0.2.2:3000/api/users?email=$email');
+      final resp = await http.get(uri);
       if (!mounted) return;
 
-      setState(() {
-        _isEmailChecking = false;
-        _emailError = methods.isNotEmpty ? 'Email is already in use' : null;
-      });
+      // If endpoint returns array of users and includes email, mark as taken.
+      if (resp.statusCode == 200) {
+        final body = json.decode(resp.body);
+        final exists = (body is List && body.any((u) => u['email'] == email));
+        setState(() {
+          _isEmailChecking = false;
+          _emailError = exists ? 'Email is already in use' : null;
+        });
+      } else {
+        // If the endpoint doesn't support this check, ignore
+        setState(() {
+          _isEmailChecking = false;
+          _emailError = null;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -108,39 +125,42 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      // Create user account
-      final userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
-
-      final user = userCredential.user;
-      if (user == null) throw Exception("User creation failed");
-
-      // Create user document
-      await FirebaseFirestore.instance
-          .collection(AppConstants.usersCollection)
-          .doc(email)
-          .set({
-        'email': email,
-        'uid': user.uid,
-        'email_status': 'unverified',
-        'account_status': 'incomplete',
-        'created_at': FieldValue.serverTimestamp(),
-      });
-
-      // Send verification email
-      await user.sendEmailVerification();
-
-      if (!mounted) return;
-
-      // Navigate to email verification
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationScreen(email: email),
-        ),
+      // Send create request to your backend
+      final resp = await http.post(
+        Uri.parse(createUserUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          // minimal fields - expand if your backend requires them
+          'email': email,
+          'password': password,
+          // add role_id if required, e.g. 'role_id': 2,
+          // add other fields as needed (first_name, last_name, username...)
+        }),
       );
-    } on FirebaseAuthException catch (e) {
-      _handleFirebaseAuthError(e);
+
+      if (resp.statusCode == 201 || resp.statusCode == 200) {
+        // Created successfully.
+        // NOTE: the server should ideally send a verification email if you rely on EmailVerificationScreen.
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(email: email),
+          ),
+        );
+        return;
+      }
+
+      // Handle known error payloads
+      final body = resp.body.isNotEmpty ? json.decode(resp.body) : null;
+      final message =
+          (body is Map && (body['message'] ?? body['error']) != null)
+              ? (body['message'] ?? body['error'])
+              : 'Failed to create account';
+
+      setState(() {
+        _generalError = message;
+      });
     } catch (e) {
       setState(() {
         _generalError = 'An unknown error occurred';
@@ -150,23 +170,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
   }
 
-  void _handleFirebaseAuthError(FirebaseAuthException e) {
-    final message = switch (e.code) {
-      'weak-password' => 'Password is too weak',
-      'invalid-email' => 'Invalid email format',
-      'operation-not-allowed' => 'Authentication not allowed',
-      'email-already-in-use' => 'Email is already in use',
-      'network-request-failed' => 'Network error occurred',
-      _ => 'Authentication error occurred',
-    };
-
-    setState(() {
-      _generalError = message;
-    });
-  }
-
   Future<void> _signInWithProvider(
-    Future<UserCredential?> Function() signInMethod,
+    Future<dynamic> Function() signInMethod,
   ) async {
     if (_isLoading) return;
 
@@ -174,14 +179,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final userCredential = await signInMethod();
-      if (userCredential?.user != null && mounted) {
+      // Provided AuthServices may or may not implement social sign-ins.
+      final result = await signInMethod();
+      // If social sign-in returns a user-like object, navigate to verification or complete profile.
+      if (result != null && mounted) {
+        final email = (result is Map ? result['email'] : null) ?? '';
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => EmailVerificationScreen(
-              email: userCredential?.user?.email ?? '',
-            ),
+            builder: (_) => EmailVerificationScreen(email: email),
           ),
         );
       }
@@ -392,38 +398,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
-  Widget _buildDivider() {
-    final theme = Theme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Row(
-        children: [
-          Expanded(
-            child: Divider(
-              color: theme.colorScheme.outline.withOpacity(0.3),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "or",
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Divider(
-              color: theme.colorScheme.outline.withOpacity(0.3),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSocialButton({
     required String text,
     required Widget icon,
@@ -470,64 +444,35 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
-  Widget _buildSocialButtons() {
-    return Column(
-      children: [
-        _buildSocialButton(
-          text: "Continue with Google",
-          icon: Image.asset('assets/images/google_logo.png',
-              width: 24, height: 24),
-          onPressed: () => _signInWithProvider(
-            AuthServices.signInWithGoogle,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildTermsText(BuildContext context) {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 12,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Text.rich(
         TextSpan(
           text: "By clicking continue, you agree to our ",
           style: GoogleFonts.poppins(
-            fontSize: 12,
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
-            height: 1.4,
-          ),
+              fontSize: 12,
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              height: 1.4),
           children: [
             TextSpan(
               text: "Terms of Service",
               style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Colors.black,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  // TODO: Navigate to terms
-                },
+                  fontSize: 12,
+                  color: Colors.black,
+                  fontWeight: FontWeight.w600),
+              recognizer: TapGestureRecognizer()..onTap = () {},
             ),
             const TextSpan(text: " and "),
             TextSpan(
               text: "Privacy Policy",
               style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Colors.black,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  // TODO: Navigate to privacy
-                },
+                  fontSize: 12,
+                  color: Colors.black,
+                  fontWeight: FontWeight.w600),
+              recognizer: TapGestureRecognizer()..onTap = () {},
             ),
           ],
         ),
@@ -543,23 +488,18 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       child: TextButton(
         onPressed: _isLoading
             ? null
-            : () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const StudentLoginScreen()),
-                ),
+            : () => Navigator.pushReplacement(context,
+                MaterialPageRoute(builder: (_) => const StudentLoginScreen())),
         style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
         child: Text(
           'Already have an account? Sign in',
           style: GoogleFonts.poppins(
-            fontSize: 16,
-            color: theme.colorScheme.onSurface,
-            fontWeight: FontWeight.w600,
-          ),
+              fontSize: 16,
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -573,26 +513,44 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       child: SingleChildScrollView(
         child: Form(
           key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // General Error Display
-              _buildErrorContainer(_generalError),
-
-              _buildEmailField(),
-              _buildPasswordField(),
-              _buildConfirmPasswordField(),
-              _buildCreateAccountButton(),
-              _buildDivider(),
-              _buildSocialButtons(),
-              const SizedBox(height: 12),
-              _buildTermsText(context),
-              const SizedBox(height: 32),
-              _buildLoginLink(),
-              const SizedBox(height: 30),
-            ],
-          ),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _buildErrorContainer(_generalError),
+            _buildEmailField(),
+            _buildPasswordField(),
+            _buildConfirmPasswordField(),
+            _buildCreateAccountButton(),
+            _buildDivider(),
+            const SizedBox(height: 12),
+            _buildTermsText(context),
+            const SizedBox(height: 32),
+            _buildLoginLink(),
+            const SizedBox(height: 30),
+          ]),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      child: Row(
+        children: [
+          Expanded(
+              child:
+                  Divider(color: theme.colorScheme.outline.withOpacity(0.3))),
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text("or",
+                  style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6)))),
+          Expanded(
+              child:
+                  Divider(color: theme.colorScheme.outline.withOpacity(0.3))),
+        ],
       ),
     );
   }

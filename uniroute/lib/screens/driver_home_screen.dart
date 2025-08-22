@@ -1,4 +1,3 @@
-// driver_home_screen.dart
 import 'package:flutter/material.dart';
 import 'driver_profile_page.dart';
 import 'route_selection_page.dart';
@@ -9,12 +8,12 @@ enum BusPage { route, preTrip, activeTrip }
 
 class DriverHomeScreen extends StatefulWidget {
   final int initialIndex;
-  final String driverName;
+  final Map<String, dynamic> driver; // ✅ full user object
 
   const DriverHomeScreen({
     super.key,
     this.initialIndex = 0,
-    this.driverName = 'Driver Name',
+    required this.driver,
   });
 
   @override
@@ -61,7 +60,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   void _endTrip() {
     setState(() {
-      _busPage = BusPage.preTrip; // Go back to PreTrip, not Route
+      _busPage = BusPage.preTrip;
     });
   }
 
@@ -71,7 +70,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     if (_selectedIndex == 1) {
       bodyContent = DriverProfilePage(
-        driverName: widget.driverName,
+        driver: widget.driver, // ✅ pass full user object
         onBack: () {
           setState(() {
             _selectedIndex = 0;
@@ -106,12 +105,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             },
             onBack: () {
               setState(() {
-                _busPage = BusPage.route; // ✅ Go back to route selection
+                _busPage = BusPage.route;
               });
             },
           );
           break;
-
         case BusPage.activeTrip:
           bodyContent = ActiveTripPage(
             route: selectedRoute!,
@@ -126,7 +124,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             },
             onBack: () {
               setState(() {
-                _busPage = BusPage.route; // ✅ Go back to route selection
+                _busPage = BusPage.route;
               });
             },
           );
@@ -135,8 +133,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey[100], // Same background as HomeScreen
-      extendBody: true, // Allow body to extend behind navigation bar
+      backgroundColor: Colors.grey[100],
+      extendBody: true,
       body: SafeArea(
         top: false,
         child: bodyContent,
@@ -151,13 +149,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               color: Colors.black.withOpacity(0.15),
               blurRadius: 20,
               offset: const Offset(0, 8),
-              spreadRadius: 0,
             ),
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
               blurRadius: 5,
               offset: const Offset(0, 2),
-              spreadRadius: 0,
             ),
           ],
         ),
