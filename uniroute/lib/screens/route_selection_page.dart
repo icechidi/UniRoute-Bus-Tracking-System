@@ -1,11 +1,15 @@
+// route_selection_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../widgets/emergency_button.dart';
+import '../widgets/universal_app_bar.dart';
+import '../utils/route_services.dart';
 
 class RouteSelectionPage extends StatefulWidget {
-  final void Function(String routeId, String timeRaw) onContinue;
+  final void Function(String route, String time) onContinue;
   final VoidCallback onProfileTap;
 
   const RouteSelectionPage({
@@ -19,226 +23,257 @@ class RouteSelectionPage extends StatefulWidget {
 }
 
 class _RouteSelectionPageState extends State<RouteSelectionPage> {
-  String selectedRouteId = '';
-  String selectedRouteName = '';
-  String selectedTimeDisplay = '';
-  String selectedTimeRaw = '';
+  String selectedRoute = '';
+  String? selectedRouteId;
+  String selectedTime = '';
 
   List<Map<String, dynamic>> routes = [];
-  Map<String, List<String>> routeTimesRaw = {};
-  Map<String, List<String>> routeTimesDisplay = {};
+  List<String> times = [];
 
-  List<String> displayedTimes = [];
-  bool loading = true;
+  final Map<String, List<String>> _localTimesCache = {};
 
-  final String baseUrl = 'http://172.55.4.160:3000/api';
+  bool isLoadingRoutes = true;
+  bool isLoadingTimes = false;
+  String? errorMsg;
+
+  static const _routesCacheKey = 'cached_routes_v1';
+  static const _routeTimesCachePrefix = 'cached_route_times_v1_';
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    _loadCachedThenRemoteRoutes();
   }
 
-  String _formatDeparture(String raw) {
-    final s = raw.trim();
-    if (s.isEmpty) return '';
-
-    try {
-      // If it's time-only like HH:mm or HH:mm:ss
-      final timeOnlyReg = RegExp(r'^\d{1,2}:\d{2}(:\d{2})?$');
-      if (timeOnlyReg.hasMatch(s)) {
-        final parts = s.split(':');
-        final h = int.tryParse(parts[0]) ?? 0;
-        final m = int.tryParse(parts[1]) ?? 0;
-        final dt = DateTime.now().toLocal().copyWith(hour: h, minute: m);
-        return DateFormat('hh:mm a').format(dt);
-      }
-
-      // Handle full timestamp formats
-      String candidate = s;
-      if (s.contains(' ') && !s.contains('T')) {
-        candidate = s.replaceFirst(' ', 'T');
-      }
-
-      final dt = DateTime.parse(candidate).toLocal();
-      return DateFormat('hh:mm a').format(dt);
-    } catch (_) {
-      return s;
-    }
+  /// Helper: normalize routeId safely
+  String _extractRouteId(Map<String, dynamic> r) {
+    return (r['route_id'] ?? r['id'] ?? r['routeId'] ?? r['raw']?['route_id'])
+            ?.toString() ??
+        '';
   }
 
-  Future<void> _fetchData() async {
-    setState(() => loading = true);
+  Future<void> _loadCachedThenRemoteRoutes() async {
+    setState(() {
+      isLoadingRoutes = true;
+      errorMsg = null;
+    });
+
     try {
-      // Fetch routes
-      final routesResp = await http.get(Uri.parse('$baseUrl/routes'));
-      if (routesResp.statusCode != 200) {
-        throw Exception('Failed to load routes');
-      }
+      final prefs = await SharedPreferences.getInstance();
 
-      final List routesData = jsonDecode(routesResp.body) as List;
-      routes = routesData
-          .map((r) {
-            return {
-              'id': (r['route_id'] ?? '').toString().trim(),
-              'name': (r['route_name'] ?? '').toString().trim(),
-            };
-          })
-          .where((r) => r['id']!.isNotEmpty)
-          .toList();
-
-      // Fetch route times
-      final timesResp = await http.get(Uri.parse('$baseUrl/route_times'));
-      if (timesResp.statusCode != 200) {
-        throw Exception('Failed to load route times');
-      }
-
-      final List timesData = jsonDecode(timesResp.body) as List;
-
-      // Build both raw and display maps keyed by route id
-      routeTimesRaw = {};
-      routeTimesDisplay = {};
-
-      for (final t in timesData) {
-        final rid = (t['route_id'] ?? '').toString().trim();
-        final rawTime = (t['departure_time'] ?? '').toString().trim();
-
-        if (rid.isEmpty || rawTime.isEmpty) continue;
-
-        final display = _formatDeparture(rawTime);
-
-        if (!routeTimesRaw.containsKey(rid)) {
-          routeTimesRaw[rid] = [];
-          routeTimesDisplay[rid] = [];
+      // Load cached first
+      final cached = prefs.getString(_routesCacheKey);
+      if (cached != null && cached.isNotEmpty) {
+        try {
+          final List decoded = json.decode(cached);
+          routes = decoded
+              .whereType<Map>()
+              .map((m) => Map<String, dynamic>.from(m as Map))
+              .toList();
+          debugPrint('Loaded ${routes.length} routes from cache');
+        } catch (e) {
+          debugPrint('Failed to decode cached routes: $e');
         }
-
-        routeTimesRaw[rid]!.add(rawTime);
-        routeTimesDisplay[rid]!.add(display);
       }
+
+      setState(() => isLoadingRoutes = false);
+
+      // Fetch network routes
+      final fetched = await RouteServices.fetchRoutes();
+      debugPrint('Fetched ${fetched.length} routes from network');
+
+      await prefs.setString(_routesCacheKey, json.encode(fetched));
 
       setState(() {
-        loading = false;
+        routes = fetched;
+        errorMsg = null;
+        isLoadingRoutes = false;
       });
     } catch (e) {
-      debugPrint('Error fetching data: $e');
-      setState(() => loading = false);
-
-      // Show error to user
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to load data: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      debugPrint('Error loading routes: $e');
+      setState(() {
+        errorMsg = 'Failed to load routes';
+        isLoadingRoutes = false;
+      });
     }
   }
 
-  void _onRouteSelected(String routeId, String routeName) {
-    final normalizedId = routeId.toString().trim();
+  Future<void> _loadTimesForRoute(String routeId) async {
+    if (routeId.isEmpty) return;
+
     setState(() {
-      selectedRouteId = normalizedId;
-      selectedRouteName = routeName;
-      selectedTimeDisplay = '';
-      selectedTimeRaw = '';
-
-      // Get times for the selected route using route_id
-      displayedTimes = List<String>.from(routeTimesDisplay[normalizedId] ?? []);
-
-      // Sort times chronologically
-      displayedTimes.sort((a, b) {
-        try {
-          final format = DateFormat('hh:mm a');
-          return format.parse(a).compareTo(format.parse(b));
-        } catch (e) {
-          return a.compareTo(b);
-        }
-      });
+      isLoadingTimes = true;
+      times = [];
+      selectedTime = '';
+      errorMsg = null;
     });
+
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = '$_routeTimesCachePrefix$routeId';
+
+    // Try cached first
+    final cachedJson = prefs.getString(cacheKey);
+    if (cachedJson != null) {
+      try {
+        final List decoded = json.decode(cachedJson);
+        final cachedList = decoded.map((e) => e.toString()).toList();
+        _localTimesCache[routeId] = cachedList;
+        setState(() {
+          times = cachedList;
+          isLoadingTimes = false;
+        });
+        debugPrint('Loaded ${cachedList.length} times from cache for $routeId');
+      } catch (e) {
+        debugPrint('Failed to parse cached times: $e');
+      }
+    }
+
+    // Then fetch fresh
+    try {
+      final fetched = await RouteServices.fetchRouteTimes(routeId);
+      debugPrint('Fetched ${fetched.length} times from network for $routeId');
+
+      _localTimesCache[routeId] = fetched;
+      await prefs.setString(cacheKey, json.encode(fetched));
+
+      setState(() {
+        times = fetched;
+        isLoadingTimes = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching times for $routeId: $e');
+      if (times.isEmpty) {
+        setState(() {
+          errorMsg = 'Failed to load times';
+          isLoadingTimes = false;
+        });
+      } else {
+        setState(() => isLoadingTimes = false);
+      }
+    }
   }
 
-  void _onTimeSelected(String display) {
-    final idx = routeTimesDisplay[selectedRouteId]?.indexOf(display) ?? -1;
-    final raw = (idx >= 0 && routeTimesRaw[selectedRouteId] != null)
-        ? routeTimesRaw[selectedRouteId]![idx]
-        : display;
+  void _onRouteTap(String routeName) {
+    final chosen = routes.firstWhere(
+      (r) => r['route_name'] == routeName,
+      orElse: () => <String, dynamic>{},
+    );
+
+    final idStr = _extractRouteId(chosen);
+
+    if (idStr.isEmpty) {
+      debugPrint('Route id missing for: $chosen');
+      setState(() => errorMsg = 'Invalid route id');
+      return;
+    }
+
+    // Deselect if tapped again
+    if (selectedRoute == routeName) {
+      setState(() {
+        selectedRoute = '';
+        selectedRouteId = null;
+        times = [];
+        selectedTime = '';
+      });
+      return;
+    }
 
     setState(() {
-      selectedTimeDisplay = display;
-      selectedTimeRaw = raw;
+      selectedRoute = routeName;
+      selectedRouteId = idStr;
+      selectedTime = '';
+      errorMsg = null;
     });
+
+    _loadTimesForRoute(idStr);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text('Transports', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: widget.onProfileTap,
-          ),
-        ],
+      appBar: UniversalAppBar(
+        title: 'Transports',
+        onProfileTap: widget.onProfileTap,
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
+      body: Column(
+        children: [
+          Expanded(
+            child: isLoadingRoutes
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
                     child: Column(
                       children: [
                         _buildSectionTitle('ROUTE'),
-                        _buildRouteChips(),
+                        if (errorMsg != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Text(errorMsg!,
+                                style: const TextStyle(color: Colors.red)),
+                          ),
+                        _buildChoiceChips(
+                          routes
+                              .map((r) => r['route_name']?.toString() ?? '')
+                              .where((s) => s.isNotEmpty)
+                              .toList(),
+                          selectedRoute,
+                          _onRouteTap,
+                        ),
                         const SizedBox(height: 32),
                         const Divider(
                             thickness: 1, height: 40, color: Colors.grey),
                         _buildSectionTitle('TIME'),
-                        displayedTimes.isEmpty
-                            ? Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Text(
-                                  selectedRouteId.isEmpty
-                                      ? 'Select a route to see times'
-                                      : 'No times available for "$selectedRouteName"',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              )
-                            : _buildChoiceChips(displayedTimes,
-                                selectedTimeDisplay, _onTimeSelected),
+                        if (isLoadingTimes)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12.0),
+                            child: CircularProgressIndicator(),
+                          )
+                        else if (selectedRoute.isEmpty)
+                          _placeholderText(
+                              'Tap a route to show departure times')
+                        else if (times.isEmpty)
+                          _placeholderText(
+                              'No times available for "$selectedRoute"')
+                        else
+                          _buildChoiceChips(times, selectedTime, (val) {
+                            setState(() => selectedTime = val);
+                          }),
                         const SizedBox(height: 30),
                         SizedBox(
                           width: MediaQuery.of(context).size.width * 0.8,
                           child: ElevatedButton(
-                            onPressed: selectedRouteId.isNotEmpty &&
-                                    selectedTimeDisplay.isNotEmpty
-                                ? () {
-                                    widget.onContinue(
-                                        selectedRouteId, selectedTimeRaw);
-                                  }
+                            onPressed: selectedRoute.isNotEmpty &&
+                                    selectedTime.isNotEmpty
+                                ? () => widget.onContinue(
+                                    selectedRoute, selectedTime)
                                 : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: Colors.grey,
-                              disabledForegroundColor: Colors.white70,
-                              minimumSize: const Size.fromHeight(50),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                            style: ButtonStyle(
+                              backgroundColor:
+                                  MaterialStateProperty.resolveWith(
+                                (states) =>
+                                    states.contains(MaterialState.disabled)
+                                        ? Colors.black.withOpacity(0.4)
+                                        : Colors.black,
+                              ),
+                              foregroundColor:
+                                  MaterialStateProperty.all(Colors.white),
+                              minimumSize: MaterialStateProperty.all(
+                                  const Size.fromHeight(50)),
+                              shape: MaterialStateProperty.all(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              overlayColor: MaterialStateProperty.all(
+                                Colors.transparent,
                               ),
                             ),
                             child: Text(
                               'Continue',
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
+                                color: Colors.white,
                               ),
                             ),
                           ),
@@ -246,68 +281,17 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
+          ),
+          const EmergencyButton(bottomSpacing: 0),
+        ],
+      ),
     );
   }
 
-  Widget _buildRouteChips() {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 12,
-      runSpacing: 12,
-      children: routes.map((route) {
-        final id = route['id']!;
-        final name = route['name']!;
-        final isSelected = id == selectedRouteId;
-        return ChoiceChip(
-          label: Text(name),
-          selected: isSelected,
-          onSelected: (selected) {
-            if (selected) {
-              _onRouteSelected(id, name);
-            }
-          },
-          backgroundColor: Colors.black,
-          selectedColor: Colors.grey[800],
-          labelStyle: GoogleFonts.poppins(
-            color: Colors.white,
-            fontSize: 14,
-          ),
-          labelPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildChoiceChips(
-      List<String> options, String selected, ValueChanged<String> onSelected) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 12,
-      runSpacing: 12,
-      children: options.map((option) {
-        final isSelected = option == selected;
-        return ChoiceChip(
-          label: Text(option),
-          selected: isSelected,
-          onSelected: (selected) {
-            if (selected) {
-              onSelected(option);
-            }
-          },
-          backgroundColor: Colors.black,
-          selectedColor: Colors.grey[800],
-          labelStyle: GoogleFonts.poppins(
-            color: Colors.white,
-            fontSize: 14,
-          ),
-          labelPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        );
-      }).toList(),
-    );
-  }
+  Widget _placeholderText(String msg) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12.0),
+        child: Text(msg, style: GoogleFonts.poppins(fontSize: 14)),
+      );
 
   Widget _buildSectionTitle(String title) {
     return Padding(
@@ -320,13 +304,60 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Center(
-          child: Text(title,
-              style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16)),
+          child: Text(
+            title,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildChoiceChips(
+    List<String> options,
+    String selected,
+    ValueChanged<String> onSelected,
+  ) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 12,
+      runSpacing: 12,
+      children: options.map((option) {
+        final bool isSelected = option == selected;
+        return GestureDetector(
+          onTap: () => onSelected(option),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 90, maxWidth: 140),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            height: 60,
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.grey[900] : Colors.black,
+              borderRadius: BorderRadius.circular(23),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              option,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

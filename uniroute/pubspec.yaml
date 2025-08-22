@@ -18,6 +18,7 @@ dependencies:
   cloud_firestore: ^5.6.11
   firebase_crashlytics: ^4.3.9  # For crash reporting
   firebase_storage: ^12.4.10
+  device_info_plus: ^10.0.1  # For device-specific info
 
   # 🔐 Social Sign-In
   google_sign_in: ^6.1.0

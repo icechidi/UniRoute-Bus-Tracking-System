@@ -1,4 +1,3 @@
-// lib/services/auth_services.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
@@ -12,9 +11,9 @@ class AuthServices {
   static const String _authEmailKey = 'auth_email';
   static const String _authUserKey = 'auth_user'; // user JSON in prefs
 
-  // 👇 Replace with your private IP and port
+  // 👇 Replace with your private IP and port if needed
   // Example: backend machine IP = 192.168.1.50
-  static const String loginUrl = 'http://172.55.4.160:3000/api/auth/login';
+  static const String loginUrl = 'http://172.55.6.33:3000/api/auth/login';
 
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
@@ -33,19 +32,27 @@ class AuthServices {
         body: json.encode(body),
       );
 
-      final respBody = json.decode(resp.body);
+      // Attempt to decode body (may throw)
+      dynamic respBody;
+      try {
+        respBody = json.decode(resp.body);
+      } catch (_) {
+        respBody = null;
+      }
 
-      if (resp.statusCode != 200) {
+      // Accept 200 or 201 as success
+      if (resp.statusCode != 200 && resp.statusCode != 201) {
+        debugPrint('Login failed: ${resp.statusCode} - ${resp.body}');
         final msg = (respBody is Map &&
                 (respBody['message'] ?? respBody['error']) != null)
-            ? (respBody['message'] ?? respBody['error'])
-            : 'Login failed';
+            ? (respBody['message'] ?? respBody['error']).toString()
+            : 'Login failed (status ${resp.statusCode})';
         throw Exception(msg);
       }
 
       final user = (respBody is Map && respBody['user'] != null)
           ? Map<String, dynamic>.from(respBody['user'])
-          : null;
+          : (respBody is Map ? Map<String, dynamic>.from(respBody) : null);
 
       final token = (respBody is Map &&
               (respBody['token'] ?? respBody['access_token']) != null)
@@ -87,6 +94,7 @@ class AuthServices {
     }
   }
 
+  // Private persistence helper (keeps behaviour intact)
   static Future<void> _saveAuthData(String? token, Map<String, dynamic>? user,
       String? email, bool keepSignedIn) async {
     final prefs = await SharedPreferences.getInstance();
@@ -115,11 +123,19 @@ class AuthServices {
     }
   }
 
+  /// PUBLIC wrapper so other files can update stored auth data when needed.
+  static Future<void> saveAuthData(String? token, Map<String, dynamic>? user,
+      String? email, bool keepSignedIn) {
+    return _saveAuthData(token, user, email, keepSignedIn);
+  }
+
+  /// Returns whether user chose "keep signed in"
   static Future<bool> shouldKeepSignedIn() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_keepSignedInKey) ?? false;
   }
 
+  /// Read token from secure storage
   static Future<String?> getStoredToken() async {
     return _secureStorage.read(key: _authTokenKey);
   }
@@ -129,6 +145,7 @@ class AuthServices {
     return prefs.getString(_authEmailKey);
   }
 
+  /// Returns the stored user JSON (if any) from SharedPreferences
   static Future<Map<String, dynamic>?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_authUserKey);
@@ -141,6 +158,12 @@ class AuthServices {
     }
   }
 
+  /// PUBLIC alias for backward-friendly naming in UI code
+  static Future<Map<String, dynamic>?> getSavedUser() {
+    return getCurrentUser();
+  }
+
+  /// Headers for authenticated calls
   static Future<Map<String, String>> authHeaders() async {
     final token = await getStoredToken();
     final headers = {'Content-Type': 'application/json'};
