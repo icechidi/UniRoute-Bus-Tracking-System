@@ -3,12 +3,19 @@ import 'driver_profile_page.dart';
 import 'route_selection_page.dart';
 import 'pre_trip_page.dart';
 import 'active_trip_page.dart';
+import 'bus_selection_page.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:geolocator/geolocator.dart';
+import 'dart:async';
+import 'map_screen.dart';
 
 enum BusPage { route, preTrip, activeTrip }
 
 class DriverHomeScreen extends StatefulWidget {
   final int initialIndex;
-  final Map<String, dynamic> driver; // ✅ full user object
+  final Map<String, dynamic> driver;
 
   const DriverHomeScreen({
     super.key,
@@ -26,6 +33,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   late BusPage _previousPage;
   String? selectedRoute;
   String? selectedTime;
+  String? selectedBusId;
+
+  StreamSubscription<Position>? _locationStream;
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref();
 
   @override
   void initState() {
@@ -44,24 +55,120 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     });
   }
 
+  // Show bus selection page after route/time selection
   void _goToPreTrip(String route, String time) {
     setState(() {
       selectedRoute = route;
       selectedTime = time;
-      _busPage = BusPage.preTrip;
+    });
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BusSelectionPage(
+          onBusSelected: (busId) {
+            setState(() {
+              selectedBusId = busId;
+              _busPage = BusPage.preTrip;
+            });
+            Navigator.pop(context); // Remove bus selection page
+          },
+          onBack: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _startSendingLocation() {
+    _locationStream?.cancel();
+    if (selectedBusId == null) return;
+    _locationStream = Geolocator.getPositionStream().listen((Position position) {
+      _dbRef.child('trips/${selectedBusId!}/location').set({
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
     });
   }
 
-  void _goToActiveTrip() {
+  void _stopSendingLocation() {
+    _locationStream?.cancel();
+  }
+
+  void _goToActiveTrip() async {
+    if (selectedRoute == null || selectedTime == null || selectedBusId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a route, time, and bus before starting the trip.')),
+      );
+      return;
+    }
+    await startTripOnBackend(selectedRoute!, selectedTime!, selectedBusId!, widget.driver['id']);
+    _startSendingLocation();
     setState(() {
       _busPage = BusPage.activeTrip;
     });
+
+    // Navigate to MapScreen and pass busId
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapScreen(busId: selectedBusId!),
+      ),
+    );
   }
 
-  void _endTrip() {
+  void _endTrip() async {
+    if (selectedRoute == null || selectedTime == null || selectedBusId == null) return;
+    await endTripOnBackend(selectedRoute!, selectedTime!, selectedBusId!, widget.driver['id']);
+    _stopSendingLocation();
     setState(() {
       _busPage = BusPage.preTrip;
     });
+  }
+
+  // --- Backend API Calls ---
+  Future<void> startTripOnBackend(String route, String time, String busId, String driverId) async {
+    final url = Uri.parse('https://172.55.4.160:3000/api/trips/start');
+    final body = jsonEncode({
+      'route': route,
+      'time': time,
+      'busId': busId,
+      'driverId': driverId,
+    });
+    try {
+      final response = await http.post(url, body: body, headers: {'Content-Type': 'application/json'});
+      if (response.statusCode != 200) {
+        print('Failed to start trip: ${response.body}');
+      }
+    } catch (e) {
+      print('Error starting trip: $e');
+    }
+  }
+
+  Future<void> endTripOnBackend(String route, String time, String busId, String driverId) async {
+    final url = Uri.parse('https://172.55.4.160:3000/api/trips/end');
+    final body = jsonEncode({
+      'route': route,
+      'time': time,
+      'busId': busId,
+      'driverId': driverId,
+    });
+    try {
+      final response = await http.post(url, body: body, headers: {'Content-Type': 'application/json'});
+      if (response.statusCode != 200) {
+        print('Failed to end trip: ${response.body}');
+      }
+    } catch (e) {
+      print('Error ending trip: $e');
+    }
+  }
+  // --- End Backend API Calls ---
+
+  @override
+  void dispose() {
+    _locationStream?.cancel();
+    super.dispose();
   }
 
   @override
@@ -70,7 +177,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     if (_selectedIndex == 1) {
       bodyContent = DriverProfilePage(
-        driver: widget.driver, // ✅ pass full user object
+        driver: widget.driver,
         onBack: () {
           setState(() {
             _selectedIndex = 0;
@@ -95,7 +202,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           bodyContent = PreTripPage(
             route: selectedRoute!,
             time: selectedTime!,
-            busId: 'ID #4571',
+            busId: selectedBusId ?? 'ID #4571',
             onStartTrip: _goToActiveTrip,
             onProfileTap: () {
               setState(() {
@@ -114,7 +221,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           bodyContent = ActiveTripPage(
             route: selectedRoute!,
             time: selectedTime!,
-            busId: 'ID #4571',
+            busId: selectedBusId ?? 'ID #4571',
             onStopTrip: _endTrip,
             onProfileTap: () {
               setState(() {
@@ -137,7 +244,31 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       extendBody: true,
       body: SafeArea(
         top: false,
-        child: bodyContent,
+        child: Column(
+          children: [
+            Expanded(child: bodyContent),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.warning, color: Colors.white),
+                  label: const Text('Emergency', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    // TODO: Implement emergency action
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),

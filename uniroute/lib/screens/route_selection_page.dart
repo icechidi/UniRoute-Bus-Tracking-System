@@ -68,7 +68,7 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
           final List decoded = json.decode(cached);
           routes = decoded
               .whereType<Map>()
-              .map((m) => Map<String, dynamic>.from(m as Map))
+              .map((m) => Map<String, dynamic>.from(m))
               .toList();
           debugPrint('Loaded ${routes.length} routes from cache');
         } catch (e) {
@@ -250,22 +250,22 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                                 : null,
                             style: ButtonStyle(
                               backgroundColor:
-                                  MaterialStateProperty.resolveWith(
+                                  WidgetStateProperty.resolveWith(
                                 (states) =>
-                                    states.contains(MaterialState.disabled)
+                                    states.contains(WidgetState.disabled)
                                         ? Colors.black.withOpacity(0.4)
                                         : Colors.black,
                               ),
                               foregroundColor:
-                                  MaterialStateProperty.all(Colors.white),
-                              minimumSize: MaterialStateProperty.all(
+                                  WidgetStateProperty.all(Colors.white),
+                              minimumSize: WidgetStateProperty.all(
                                   const Size.fromHeight(50)),
-                              shape: MaterialStateProperty.all(
+                              shape: WidgetStateProperty.all(
                                 RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
-                              overlayColor: MaterialStateProperty.all(
+                              overlayColor: WidgetStateProperty.all(
                                 Colors.transparent,
                               ),
                             ),

@@ -128,7 +128,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           if (parsed is Map) updated = Map<String, dynamic>.from(parsed);
         }
 
-        if (updated == null) updated = (_driverData ?? {})..addAll(body);
+        updated ??= (_driverData ?? {})..addAll(body);
 
         _setFromMap(updated);
 
@@ -296,7 +296,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             BoxShadow(
                                 color: Colors.black.withOpacity(0.2),
                                 blurRadius: 8,
-                                offset: Offset(0, 2))
+                                offset: const Offset(0, 2))
                           ]),
                       child:
                           const Icon(Icons.edit, size: 18, color: Colors.black),
@@ -468,7 +468,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 borderRadius: const BorderRadius.only(
                     topRight: Radius.circular(12),
                     bottomRight: Radius.circular(12)),
-                borderSide: BorderSide(color: borderColor!)),
+                borderSide: BorderSide(color: borderColor)),
             enabledBorder: OutlineInputBorder(
                 borderRadius: const BorderRadius.only(
                     topRight: Radius.circular(12),

@@ -6,9 +6,11 @@ import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
+import 'package:firebase_database/firebase_database.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  final String busId;
+  const MapScreen({super.key, this.busId = 'ID #4571'});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -52,6 +54,10 @@ class _MapScreenState extends State<MapScreen> {
   bool _showLabels = true;
   RouteType _currentRoute = RouteType.route1;
 
+  // --- Bus Location Listening ---
+  LatLng? _busLocation;
+  StreamSubscription<DatabaseEvent>? _busLocationStream;
+
   // Enhanced location settings
   final Map<LocationAccuracyLevel, LocationSettings> _locationSettings = {
     LocationAccuracyLevel.low: const LocationSettings(
@@ -76,7 +82,6 @@ class _MapScreenState extends State<MapScreen> {
     ),
   };
 
-  // Route definitions with more precise coordinates
   final Map<RouteType, RouteData> routes = {
     RouteType.route1: RouteData(
       name: 'Route 1 - Main Line',
@@ -84,29 +89,29 @@ class _MapScreenState extends State<MapScreen> {
       markerColor: Colors.deepPurple,
       icon: Icons.directions_bus,
       stops: [
-        const LatLng(35.211350, 33.237250), // Start - Enhanced precision
-        const LatLng(35.209353, 33.298842), // Stop 1
-        const LatLng(35.208512, 33.308036), // Stop 2
-        const LatLng(35.208556, 33.317564), // Stop 3
-        const LatLng(35.212308, 33.334901), // Stop 4
-        const LatLng(35.210671, 33.343197), // Stop 5
-        const LatLng(35.211521, 33.374968), // Stop 6
-        const LatLng(35.202980, 33.374271), // Stop 7
-        const LatLng(35.202084, 33.367372), // Stop 8
-        const LatLng(35.199425, 33.367691), // Stop 9
-        const LatLng(35.194987, 33.367788), // Stop 10
-        const LatLng(35.187861, 33.365988), // Stop 11
-        const LatLng(35.182547, 33.362858), // Stop 12
-        const LatLng(35.185916, 33.357370), // Stop 13
-        const LatLng(35.190649, 33.352094), // Stop 14
-        const LatLng(35.193637, 33.348795), // Stop 15
-        const LatLng(35.197523, 33.344431), // Stop 16
-        const LatLng(35.199901, 33.340647), // Stop 17
-        const LatLng(35.205060, 33.330312), // Stop 18
-        const LatLng(35.208367, 33.317665), // Stop 19
-        const LatLng(35.208012, 33.312607), // Stop 20
-        const LatLng(35.208310, 33.307022), // Stop 21
-        const LatLng(35.211037, 33.238218), // Stop 22 (End)
+        const LatLng(35.211350, 33.237250),
+        const LatLng(35.209353, 33.298842),
+        const LatLng(35.208512, 33.308036),
+        const LatLng(35.208556, 33.317564),
+        const LatLng(35.212308, 33.334901),
+        const LatLng(35.210671, 33.343197),
+        const LatLng(35.211521, 33.374968),
+        const LatLng(35.202980, 33.374271),
+        const LatLng(35.202084, 33.367372),
+        const LatLng(35.199425, 33.367691),
+        const LatLng(35.194987, 33.367788),
+        const LatLng(35.187861, 33.365988),
+        const LatLng(35.182547, 33.362858),
+        const LatLng(35.185916, 33.357370),
+        const LatLng(35.190649, 33.352094),
+        const LatLng(35.193637, 33.348795),
+        const LatLng(35.197523, 33.344431),
+        const LatLng(35.199901, 33.340647),
+        const LatLng(35.205060, 33.330312),
+        const LatLng(35.208367, 33.317665),
+        const LatLng(35.208012, 33.312607),
+        const LatLng(35.208310, 33.307022),
+        const LatLng(35.211037, 33.238218),
       ],
     ),
     RouteType.route2: RouteData(
@@ -115,41 +120,70 @@ class _MapScreenState extends State<MapScreen> {
       markerColor: Colors.deepOrange,
       icon: Icons.directions_bus_filled,
       stops: [
-        const LatLng(35.211350, 33.237250), // Start - Enhanced precision
-        const LatLng(35.209353, 33.298842), // Stop 1
-        const LatLng(35.208512, 33.308036), // Stop 2
-        const LatLng(35.208556, 33.317564), // Stop 3
-        const LatLng(35.212308, 33.334901), // Stop 4
-        const LatLng(35.210671, 33.343197), // Stop 5
-        const LatLng(35.211521, 33.374968), // Stop 6
-        const LatLng(35.202980, 33.374271), // Stop 7
-        const LatLng(35.202084, 33.367372), // Stop 8
-        const LatLng(35.199425, 33.367691), // Stop 9
-        const LatLng(35.194987, 33.367788), // Stop 10
+        const LatLng(35.211350, 33.237250),
+        const LatLng(35.209353, 33.298842),
+        const LatLng(35.208512, 33.308036),
+        const LatLng(35.208556, 33.317564),
+        const LatLng(35.212308, 33.334901),
+        const LatLng(35.210671, 33.343197),
+        const LatLng(35.211521, 33.374968),
+        const LatLng(35.202980, 33.374271),
+        const LatLng(35.202084, 33.367372),
+        const LatLng(35.199425, 33.367691),
+        const LatLng(35.194987, 33.367788),
       ],
     ),
   };
 
   List<LatLng> routePoints = [];
 
-  // OpenRouteService API key
   static const String _orsApiKey =
       'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImY2ZWNjNWQ3NDE0ZTRlNjliMDljNWVkMmE3ZGI1ZTYxIiwiaCI6Im11cm11cjY0In0=';
 
-  @override
-  void initState() {
-    super.initState();
-    _initializeLocation();
-    _fetchRouteFromORS();
-  }
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   _initializeLocation();
+  //   _fetchRouteFromORS();
+  //   _listenToBusLocation(); // <-- Listen for bus location
+  // }
 
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
+    _busLocationStream?.cancel(); // <-- Dispose bus location stream
     super.dispose();
   }
 
   RouteData get currentRouteData => routes[_currentRoute]!;
+
+  // --- Listen for bus location from Firebase ---
+  void _listenToBusLocation() {
+    final busId = widget.busId; // Use the actual bus ID
+    _busLocationStream = FirebaseDatabase.instance
+        .ref('trips/$busId/location')
+        .onValue
+        .listen((event) {
+      final data = event.snapshot.value as Map?;
+      if (data != null && data['lat'] != null && data['lng'] != null) {
+        setState(() {
+          _busLocation = LatLng(
+            (data['lat'] as num).toDouble(),
+            (data['lng'] as num).toDouble(),
+          );
+        });
+      }
+    });
+  }
+
+    @override
+    void initState() {
+      super.initState();
+      _initializeLocation();
+      _fetchRouteFromORS();
+      _listenToBusLocation();
+    }
+
 
   String _getMapUrl() {
     switch (_currentMapStyle) {
@@ -1554,6 +1588,31 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
             ],
+            
+            // --- Bus marker from Firebase ---
+            if (_busLocation != null)
+              Marker(
+                point: _busLocation!,
+                width: 50,
+                height: 50,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.3),
+                        blurRadius: 10,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.directions_bus, color: Colors.white, size: 24),
+                  ),
+                ),
+              ),
           ],
         ),
       ],

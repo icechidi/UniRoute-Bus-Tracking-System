@@ -64,6 +64,7 @@ dependencies:
   flutter_spinkit: ^5.2.0  # Loading indicators
   google_fonts: ^6.1.0  # Modern font styles
   fluttertoast: ^8.2.4  # Toast messages
+  firebase_database: ^11.3.10
 
 
 dev_dependencies:

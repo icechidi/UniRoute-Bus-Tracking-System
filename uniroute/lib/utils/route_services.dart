@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 
 class RouteServices {
   // Update this if your backend host/path differs
-  static const String baseUrl = 'http://172.55.6.33:3000/api';
+  static const String baseUrl = 'http://172.55.4.160:3000/api';
 
   // in-memory cache keyed by normalized id string
   static final Map<String, List<String>> _timesCache = {};
@@ -159,8 +159,8 @@ class RouteServices {
       '/route-times?route_id=$idStr',
       '/route_times/$idStr',
       '/route_times/route/$idStr',
-      '/routes/times?route_id=$idStr',
-      '/routes/times?id=$idStr',
+      '/routes/stops?route_id=$idStr',
+      '/routes/stops?id=$idStr',
     ];
 
     Exception? lastException;
@@ -187,7 +187,7 @@ class RouteServices {
               if (t.isNotEmpty) parsed.add(t);
             }
           } else if (decoded is Map) {
-            // common wrappers
+            // common wrappers==================================================
             final candidates = [
               decoded['data'],
               decoded['times'],
@@ -213,9 +213,9 @@ class RouteServices {
           } else {
             // fallback: split by commas or take trimmed body
             final s = resp.body;
-            if (s.contains(','))
+            if (s.contains(',')) {
               parsed.addAll(s.split(',').map((e) => _trimToHourMinute(e)));
-            else {
+            } else {
               final t = _trimToHourMinute(s);
               if (t.isNotEmpty) parsed.add(t);
             }
@@ -237,7 +237,7 @@ class RouteServices {
         } else {
           // other error (401/403/500/etc) — surface it
           throw Exception(
-              'Failed to load route times for $idStr: ${resp.statusCode} ${preview}');
+              'Failed to load route times for $idStr: ${resp.statusCode} $preview');
         }
       } on TimeoutException catch (e) {
         lastException =
