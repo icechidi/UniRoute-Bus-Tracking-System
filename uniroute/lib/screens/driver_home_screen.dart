@@ -129,7 +129,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   // --- Backend API Calls ---
   Future<void> startTripOnBackend(String route, String time, String busId, String driverId) async {
-    final url = Uri.parse('https://172.55.4.160:3000/api/trips/start');
+    final url = Uri.parse('http://172.55.4.160:3000/api/trips/start');
     final body = jsonEncode({
       'route': route,
       'time': time,
@@ -147,7 +147,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   Future<void> endTripOnBackend(String route, String time, String busId, String driverId) async {
-    final url = Uri.parse('https://172.55.4.160:3000/api/trips/end');
+    final url = Uri.parse('http://172.55.4.160:3000/api/trips/end');
     final body = jsonEncode({
       'route': route,
       'time': time,

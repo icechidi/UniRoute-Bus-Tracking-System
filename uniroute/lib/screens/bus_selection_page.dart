@@ -33,7 +33,7 @@ class _BusSelectionPageState extends State<BusSelectionPage> {
       error = null;
     });
     try {
-      final response = await http.get(Uri.parse('https://172.55.4.160:3000/api/buses'));
+      final response = await http.get(Uri.parse('http://172.55.4.160:3000/api/buses'));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         buses = data.map((e) => e as Map<String, dynamic>).toList();
@@ -70,8 +70,17 @@ class _BusSelectionPageState extends State<BusSelectionPage> {
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: ListTile(
                         leading: const Icon(Icons.directions_bus, color: Colors.deepPurple),
-                        title: Text(bus['name'] ?? 'Bus ${bus['id']}'),
-                        subtitle: Text('ID: ${bus['id']}'),
+                        title: Text(
+                          (bus['number'] != null ? 'Bus ${bus['number']}' : bus['name'] ?? 'Bus ${bus['id']}'),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('ID: ${bus['id']}'),
+                            Text('License Plate: ${bus['license_plate'] ?? 'N/A'}'),
+                          ],
+                        ),
                         onTap: () => widget.onBusSelected(bus['id'].toString()),
                       ),
                     );
