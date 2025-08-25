@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'map_screen.dart';
-import 'schedule_screen.dart'; // Create this if needed
-import 'settings_screen.dart'; // Profile/settings
+import 'student/map_screen.dart';
+import 'student/schedule_screen.dart'; // Create this if needed
+import 'student/settings_screen.dart'; // Profile/settings
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

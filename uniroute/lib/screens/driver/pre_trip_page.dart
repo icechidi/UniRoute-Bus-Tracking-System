@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../widgets/emergency_button.dart';
-import '../widgets/universal_app_bar.dart';
+import '../../widgets/emergency_button.dart';
+import '../../widgets/universal_app_bar.dart';
 
 class PreTripPage extends StatelessWidget {
   final String route;
@@ -15,7 +15,7 @@ class PreTripPage extends StatelessWidget {
     required this.route,
     required this.time,
     required this.busId,
-    required this.onStartTrip,
+    required this.onStartTrip, // ← required callback added
     required this.onProfileTap,
     required this.onBack,
   });
@@ -66,7 +66,7 @@ class PreTripPage extends StatelessWidget {
                     InkWell(
                       onTap: () {
                         print("▶️ Start Trip button tapped");
-                        onStartTrip();
+                        onStartTrip(); // ← call parent-controlled callback
                       },
                       borderRadius: BorderRadius.circular(70),
                       child: Container(

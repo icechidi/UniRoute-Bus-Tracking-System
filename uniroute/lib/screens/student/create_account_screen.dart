@@ -7,9 +7,9 @@ import 'package:flutter/gestures.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 
-import '../widgets/common_widgets.dart';
-import '../utils/validators.dart';
-import '../constants.dart';
+import '../../widgets/common_widgets.dart';
+import '../../utils/validators.dart';
+import '../../constants.dart';
 import 'email_verification_screen.dart';
 import 'student_login_screen.dart';
 

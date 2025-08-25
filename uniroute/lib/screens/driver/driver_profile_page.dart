@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 
-import '../widgets/emergency_button.dart';
+import '../../widgets/emergency_button.dart';
 import 'notification_settings_page.dart';
-import 'language_selection_page.dart';
+import '../language_selection_page.dart';
 import 'driver_login_screen.dart';
 import 'edit_profile_page.dart';
-import '../auth_services.dart';
+import '../../auth_services.dart';
 
 class DriverProfilePage extends StatefulWidget {
   /// Accepts the user object (Map) passed from the login/home flow.

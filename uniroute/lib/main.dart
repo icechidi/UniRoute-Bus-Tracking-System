@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
-import 'screens/student_login_screen.dart';
+import 'screens/student/student_login_screen.dart';
 import 'constants.dart';
 import 'utils/theme_mode_notifier.dart'; // Your notifier class
 

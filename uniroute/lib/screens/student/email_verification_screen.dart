@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../widgets/common_widgets.dart';
+import '../../widgets/common_widgets.dart';
 import 'complete_profile_screen.dart';
 
 class EmailVerificationScreen extends StatefulWidget {

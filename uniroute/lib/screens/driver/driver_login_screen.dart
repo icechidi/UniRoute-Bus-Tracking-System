@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../widgets/common_widgets.dart';
-import '../utils/validators.dart';
-import '../constants.dart';
-import '../auth_services.dart';
+import '../../widgets/common_widgets.dart';
+import '../../utils/validators.dart';
+import '../../constants.dart';
+import '../../auth_services.dart';
 import 'driver_home_screen.dart';
-import 'forgot_password_screen.dart';
+import '../forgot_password_screen.dart';
 
 class DriverLoginScreen extends StatefulWidget {
   const DriverLoginScreen({super.key});

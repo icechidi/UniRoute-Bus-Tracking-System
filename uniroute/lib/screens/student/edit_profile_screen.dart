@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-import '../utils/user_service.dart';
+import '../../utils/user_service.dart';
 import 'change_password_screen.dart';
 
 class EditProfileScreen extends StatefulWidget {

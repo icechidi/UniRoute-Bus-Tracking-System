@@ -12,8 +12,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../widgets/common_widgets.dart';
-import 'home_screen.dart';
+import '../../widgets/common_widgets.dart';
+import '../home_screen.dart';
 
 class ProfileData {
   final String firstName;

@@ -9,7 +9,7 @@ import 'dart:convert';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
-import 'map_screen.dart';
+import '../student/map_screen.dart';
 
 enum BusPage { route, preTrip, activeTrip }
 
@@ -44,6 +44,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _selectedIndex = widget.initialIndex;
     _busPage = BusPage.route;
     _previousPage = _busPage;
+
+    // DEBUG: print driver object so you can see what keys it has
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print('👤 Driver object at init: ${widget.driver}');
+    });
   }
 
   void _onTabTapped(int index) {
@@ -61,16 +66,31 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       selectedRoute = route;
       selectedTime = time;
     });
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => BusSelectionPage(
           onBusSelected: (busId) {
+            // Defensive: busId might be null/empty if DB query failed — handle gracefully
+            print('🚌 BusSelectionPage returned busId: $busId');
+            if (busId == null || (busId is String && busId.trim().isEmpty)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                      'No bus selected (bus id is null). Please try again.'),
+                ),
+              );
+              return;
+            }
+
             setState(() {
-              selectedBusId = busId;
+              selectedBusId = busId.toString();
               _busPage = BusPage.preTrip;
             });
-            Navigator.pop(context); // Remove bus selection page
+
+            // Close BusSelectionPage
+            Navigator.pop(context);
           },
           onBack: () {
             Navigator.pop(context);
@@ -83,7 +103,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void _startSendingLocation() {
     _locationStream?.cancel();
     if (selectedBusId == null) return;
-    _locationStream = Geolocator.getPositionStream().listen((Position position) {
+    _locationStream =
+        Geolocator.getPositionStream().listen((Position position) {
       _dbRef.child('trips/${selectedBusId!}/location').set({
         'lat': position.latitude,
         'lng': position.longitude,
@@ -96,21 +117,66 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _locationStream?.cancel();
   }
 
-  void _goToActiveTrip() async {
-    if (selectedRoute == null || selectedTime == null || selectedBusId == null) {
+  /// Resolve driver id from multiple possible keys that your backend might use.
+  /// Returns null if no plausible id is found.
+  String? _resolveDriverId() {
+    final dynamic rawDriver = widget.driver;
+    if (rawDriver == null) return null;
+
+    final candidate = rawDriver['id'] ??
+        rawDriver['driverId'] ??
+        rawDriver['driver_id'] ??
+        rawDriver['uid'] ??
+        rawDriver['userId'] ??
+        rawDriver['user_id'];
+
+    return candidate?.toString();
+  }
+
+  Future<void> _goToActiveTrip() async {
+    // Defensive checks before using values
+    print('▶️ Start Trip pressed. Current selections:');
+    print('   route: $selectedRoute');
+    print('   time: $selectedTime');
+    print('   busId: $selectedBusId');
+    print('   driverMap: ${widget.driver}');
+
+    if (selectedRoute == null ||
+        selectedTime == null ||
+        selectedBusId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a route, time, and bus before starting the trip.')),
+        const SnackBar(
+            content: Text(
+                'Please select a route, time, and bus before starting the trip.')),
       );
       return;
     }
 
-    await startTripOnBackend(selectedRoute!, selectedTime!, selectedBusId!, widget.driver['id']);
+    final String? driverId = _resolveDriverId();
+    if (driverId == null || driverId.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Driver ID missing — cannot start trip.')),
+      );
+      print('❌ Driver ID is missing in driver map: ${widget.driver}');
+      return;
+    }
+
+    // Final debug print
+    print(
+        '➡️ Calling backend startTrip with: route=$selectedRoute, time=$selectedTime, busId=$selectedBusId, driverId=$driverId');
+
+    // Call backend
+    await startTripOnBackend(
+        selectedRoute!, selectedTime!, selectedBusId!, driverId);
+
+    // Start sending location
     _startSendingLocation();
+
     setState(() {
       _busPage = BusPage.activeTrip;
     });
 
-    // Navigate to MapScreen and pass busId
+    // Navigate to map screen (optional). This is after we updated state to active.
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -119,19 +185,51 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
-  void _endTrip() async {
-    if (selectedRoute == null || selectedTime == null || selectedBusId == null) return;
-    await endTripOnBackend(selectedRoute!, selectedTime!, selectedBusId!, widget.driver['id']);
+  Future<void> _endTrip() async {
+    // if nothing selected, nothing to do
+    if (selectedRoute == null ||
+        selectedTime == null ||
+        selectedBusId == null) {
+      // Nothing to end, just return
+      return;
+    }
+
+    final String? driverId = _resolveDriverId();
+
+    if (driverId == null || driverId.trim().isEmpty) {
+      print('❌ Driver ID missing when ending trip: ${widget.driver}');
+      // still try to stop location and reset UI
+      _stopSendingLocation();
+      setState(() {
+        selectedRoute = null;
+        selectedTime = null;
+        selectedBusId = null;
+        _busPage = BusPage.route;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Driver ID missing — trip local state reset.')),
+      );
+      return;
+    }
+
+    await endTripOnBackend(
+        selectedRoute!, selectedTime!, selectedBusId!, driverId);
     _stopSendingLocation();
+
     setState(() {
-      _busPage = BusPage.preTrip;
+      // Reset everything so driver must re-select
+      selectedRoute = null;
+      selectedTime = null;
+      selectedBusId = null;
+      _busPage = BusPage.route; // go back to route selection
     });
   }
 
   // --- Backend API Calls ---
   Future<void> startTripOnBackend(
       String route, String time, String busId, String driverId) async {
-    final url = Uri.parse('https://172.55.4.160:3000/api/trips/start');
+    final url = Uri.parse('http://172.55.4.160:3000/api/trips/start');
     final body = jsonEncode({
       'route_id': route,
       'time': time,
@@ -149,10 +247,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       print('✅ Start trip response: ${response.statusCode} - ${response.body}');
     } catch (e) {
       print('❌ Error starting trip: $e');
+      // optionally show a SnackBar so user knows start failed
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Failed to notify server about starting trip.')),
+      );
     }
   }
 
-  Future<void> endTripOnBackend(String route, String time, String busId, String driverId) async {
+  Future<void> endTripOnBackend(
+      String route, String time, String busId, String driverId) async {
     final url = Uri.parse('http://172.55.4.160:3000/api/trips/end');
     final body = jsonEncode({
       'route': route,
@@ -160,13 +264,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       'busId': busId,
       'driverId': driverId,
     });
+
     try {
-      final response = await http.post(url, body: body, headers: {'Content-Type': 'application/json'});
+      final response = await http
+          .post(url, body: body, headers: {'Content-Type': 'application/json'});
+      print('✅ End trip response: ${response.statusCode} - ${response.body}');
       if (response.statusCode != 200) {
         print('Failed to end trip: ${response.body}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Server failed to end trip (non-200).')),
+        );
       }
     } catch (e) {
       print('Error ending trip: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Failed to notify server about ending trip.')),
+      );
     }
   }
   // --- End Backend API Calls ---
@@ -202,14 +316,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 _selectedIndex = 1;
               });
             },
-            emergencyButton: _buildEmergencyButton(), // Pass the button here
+            emergencyButton: _buildEmergencyButton(),
           );
           break;
         case BusPage.preTrip:
           bodyContent = PreTripPage(
-            route: selectedRoute!,
-            time: selectedTime!,
-            busId: selectedBusId ?? 'ID #4571',
+            // provide safe fallbacks so widget build won't throw if values are unexpectedly null
+            route: selectedRoute ?? 'Unknown route',
+            time: selectedTime ?? 'Unknown time',
+            busId: selectedBusId ?? 'Unknown bus',
             onStartTrip: _goToActiveTrip,
             onProfileTap: () {
               setState(() {
@@ -226,9 +341,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           break;
         case BusPage.activeTrip:
           bodyContent = ActiveTripPage(
-            route: selectedRoute!,
-            time: selectedTime!,
-            busId: selectedBusId ?? 'ID #4571',
+            route: selectedRoute ?? 'Unknown route',
+            time: selectedTime ?? 'Unknown time',
+            busId: selectedBusId ?? 'Unknown bus',
             onStopTrip: _endTrip,
             onProfileTap: () {
               setState(() {
@@ -254,8 +369,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         child: Column(
           children: [
             Expanded(child: bodyContent),
-
-
           ],
         ),
       ),
@@ -342,6 +455,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
           onPressed: () {
             // TODO: Implement emergency action
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('Emergency action not implemented yet.')),
+            );
           },
         ),
       ),

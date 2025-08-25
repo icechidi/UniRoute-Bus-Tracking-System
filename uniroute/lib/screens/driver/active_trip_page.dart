@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../widgets/emergency_button.dart';
-import '../widgets/universal_app_bar.dart';
+import '../../widgets/emergency_button.dart';
+import '../../widgets/universal_app_bar.dart';
 
 class ActiveTripPage extends StatelessWidget {
   final String route;
@@ -8,7 +8,7 @@ class ActiveTripPage extends StatelessWidget {
   final String busId;
   final VoidCallback onStopTrip;
   final VoidCallback onProfileTap;
-  final VoidCallback onBack; // ✅ Add this
+  final VoidCallback onBack;
 
   const ActiveTripPage({
     super.key,
@@ -17,14 +17,14 @@ class ActiveTripPage extends StatelessWidget {
     required this.busId,
     required this.onStopTrip,
     required this.onProfileTap,
-    required this.onBack, // ✅ Add this
+    required this.onBack,
   });
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        onBack(); // ✅ Reset state
+        onBack();
         return false;
       },
       child: Scaffold(
@@ -32,7 +32,7 @@ class ActiveTripPage extends StatelessWidget {
         appBar: UniversalAppBar(
           title: 'Bus',
           showBack: true,
-          onBack: onBack, // ✅ Use passed function
+          onBack: onBack,
           onProfileTap: onProfileTap,
         ),
         body: Column(
@@ -56,13 +56,16 @@ class ActiveTripPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text('Time – $time'),
-                          Text(busId),
+                          Text('Bus ID: $busId'),
                         ],
                       ),
                     ),
                     const SizedBox(height: 50),
                     GestureDetector(
-                      onTap: onStopTrip,
+                      onTap: () {
+                        print("⏸ Stop Trip button tapped");
+                        onStopTrip();
+                      },
                       child: Container(
                         width: 140,
                         height: 140,

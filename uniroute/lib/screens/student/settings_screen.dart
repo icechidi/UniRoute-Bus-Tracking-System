@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../utils/theme_mode_notifier.dart';
-import '../utils/user_service.dart';
-import '../screens/notification_screen.dart';
-import '../screens/language_screen.dart';
-import '../screens/edit_profile_screen.dart';
-import '../screens/missing_item_screen.dart';
-import '../screens/help_support_screen.dart';
-import '../screens/terms_policies_screen.dart';
+import '../../utils/theme_mode_notifier.dart';
+import '../../utils/user_service.dart';
+import 'notification_screen.dart';
+import 'language_screen.dart';
+import 'edit_profile_screen.dart';
+import '../driver/missing_item_screen.dart';
+import '../help_support_screen.dart';
+import '../terms_policies_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});

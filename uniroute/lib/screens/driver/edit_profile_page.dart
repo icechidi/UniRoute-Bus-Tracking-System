@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 
-import '../auth_services.dart';
+import '../../auth_services.dart';
 import 'change_password_page.dart';
 
 class EditProfilePage extends StatefulWidget {

@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../widgets/emergency_button.dart';
-import '../widgets/universal_app_bar.dart';
-import '../utils/route_services.dart';
+import '../../widgets/emergency_button.dart';
+import '../../widgets/universal_app_bar.dart';
+import '../../utils/route_services.dart';
 
 class RouteSelectionPage extends StatefulWidget {
   final void Function(String route, String time) onContinue;
@@ -14,11 +14,11 @@ class RouteSelectionPage extends StatefulWidget {
   final Widget? emergencyButton;
 
   const RouteSelectionPage({
-    Key? key,
+    super.key,
     required this.onContinue,
     required this.onProfileTap,
     this.emergencyButton,
-  }) : super(key: key);
+  });
 
   @override
   State<RouteSelectionPage> createState() => _RouteSelectionPageState();
@@ -113,7 +113,7 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
     final prefs = await SharedPreferences.getInstance();
     final cacheKey = '$_routeTimesCachePrefix$routeId';
 
-    // Try cached first
+    // Try cached first (local persistent cache)
     final cachedJson = prefs.getString(cacheKey);
     if (cachedJson != null) {
       try {
@@ -135,11 +135,18 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
       final fetched = await RouteServices.fetchRouteTimes(routeId);
       debugPrint('Fetched ${fetched.length} times from network for $routeId');
 
-      _localTimesCache[routeId] = fetched;
-      await prefs.setString(cacheKey, json.encode(fetched));
+      // Ensure unique and sorted order preserved by the service — but safeguard:
+      final unique = <String>[];
+      for (final t in fetched) {
+        final tt = t.toString().trim();
+        if (tt.isNotEmpty && !unique.contains(tt)) unique.add(tt);
+      }
+
+      _localTimesCache[routeId] = unique;
+      await prefs.setString(cacheKey, json.encode(unique));
 
       setState(() {
-        times = fetched;
+        times = unique;
         isLoadingTimes = false;
       });
     } catch (e) {
@@ -251,8 +258,7 @@ class _RouteSelectionPageState extends State<RouteSelectionPage> {
                                     selectedRoute, selectedTime)
                                 : null,
                             style: ButtonStyle(
-                              backgroundColor:
-                                  WidgetStateProperty.resolveWith(
+                              backgroundColor: WidgetStateProperty.resolveWith(
                                 (states) =>
                                     states.contains(WidgetState.disabled)
                                         ? Colors.black.withOpacity(0.4)
