@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "87170443990",
+    "project_id": "uniroute-36e10",
+    "storage_bucket": "uniroute-36e10.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:87170443990:android:753be3a00c10061c593777",
+        "android_client_info": {
+          "package_name": "com.example.uniroute"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "87170443990-f0ev561n5bin8f2mndsm62d0hnlhgdqs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwkJX_k9KCRF8aXNHdA1nlzhfowlFRnIs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "87170443990-f0ev561n5bin8f2mndsm62d0hnlhgdqs.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "87170443990-7olu0p0hs5ksqnd4ufknfa958sofatmn.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.uniroute"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
