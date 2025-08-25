@@ -4,9 +4,10 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../widgets/location_bottom_sheet.dart';
 import '../routes.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 
-/// MapScreen shows real-time user location on a Google Map.
-/// Includes zoom buttons, AppBar, profile avatar, and bottom navigation.
+/// MapScreen shows real-time user location on a styled Google Map.
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -15,30 +16,33 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  // Completer to manage GoogleMapController
   final Completer<GoogleMapController> _controller = Completer();
+  late GoogleMapController _mapController;
 
-  // Track bottom navigation selection
+  // Bottom navigation bar index
   int _selectedIndex = 0;
 
-  // Initial coordinates for Lefkoşa
+  // Starting coordinates (Lefkoşa)
   static const LatLng _initialLatLng = LatLng(35.1856, 33.3823);
 
-  // Initial camera setup
+  // Initial camera view (set to reasonable zoom)
   static const CameraPosition _initialCameraPosition = CameraPosition(
     target: _initialLatLng,
-    zoom: 16,
+    zoom: 16.0, // Good default for city view
     tilt: 45,
   );
 
-  // User's marker
+  // Marker to represent user position
   Marker? _userMarker;
 
-  // Used to avoid too frequent camera movements
+  // Used to prevent excessive camera animation
   bool _isCameraMoving = false;
 
-  // To avoid redundant updates when location doesn't change
+  // Stores the last known location
   LatLng? _lastLocation;
 
+  // Stream to listen for location updates
   StreamSubscription<Position>? _positionStream;
 
   @override
@@ -47,21 +51,27 @@ class _MapScreenState extends State<MapScreen> {
     _startLocationStream();
   }
 
-  /// Starts the real-time location stream
+  /// Load and apply custom map styling (optional)
+  Future<void> _setMapStyle() async {
+    final style = await DefaultAssetBundle.of(context).loadString('assets/map_style.json');
+    _mapController.setMapStyle(style);
+  }
+
+  /// Start real-time location tracking
   Future<void> _startLocationStream() async {
     bool permissionGranted = await _handlePermissions();
     if (!permissionGranted) return;
 
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 10, // Only emit when location changes significantly
+      distanceFilter: 10, // Only trigger if user moves ~10m
     );
 
     _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
       (Position position) {
         final newLatLng = LatLng(position.latitude, position.longitude);
 
-        // Only update if different from previous location
+        // Only update if location changed
         if (_lastLocation == null ||
             _lastLocation!.latitude != newLatLng.latitude ||
             _lastLocation!.longitude != newLatLng.longitude) {
@@ -71,11 +81,11 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  /// Updates user's location marker and optionally moves camera
+  /// Update user's marker and optionally move the camera
   Future<void> _updateUserLocation(LatLng position) async {
     _lastLocation = position;
 
-    // Update marker
+    // Update marker on map
     setState(() {
       _userMarker = Marker(
         markerId: const MarkerId('user'),
@@ -85,21 +95,24 @@ class _MapScreenState extends State<MapScreen> {
       );
     });
 
-    // Move camera, throttled to avoid overloading the map engine
+    // Smooth camera follow (throttled)
     if (!_isCameraMoving) {
       _isCameraMoving = true;
 
       final controller = await _controller.future;
-      controller.animateCamera(CameraUpdate.newLatLng(position));
+      // Animate camera to new location, but keep zoom at current level
+      final currentZoom = await controller.getZoomLevel();
+      controller.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(target: position, zoom: currentZoom, tilt: 45),
+      ));
 
-      // Add short delay to prevent flooding
       Future.delayed(const Duration(milliseconds: 800), () {
         _isCameraMoving = false;
       });
     }
   }
 
-  /// Request location permission
+  /// Request and check location permissions
   Future<bool> _handlePermissions() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
@@ -108,13 +121,13 @@ class _MapScreenState extends State<MapScreen> {
     return permission == LocationPermission.always || permission == LocationPermission.whileInUse;
   }
 
-  /// Zoom map in or out
+  /// Zoom in or out on the map
   Future<void> _zoomMap(bool zoomIn) async {
     final controller = await _controller.future;
     controller.animateCamera(CameraUpdate.zoomBy(zoomIn ? 1.0 : -1.0));
   }
 
-  /// Navigation bar logic
+  /// Handle bottom navigation item taps
   void _onNavTap(int index) {
     setState(() {
       _selectedIndex = index;
@@ -123,13 +136,13 @@ class _MapScreenState extends State<MapScreen> {
     if (index == 0) {
       _showBottomSheet('location');
     } else if (index == 1) {
-      Navigator.pushNamed(context, Routes.schedule);
+      Navigator.pushNamed(context, Routes.booking);
     } else if (index == 2) {
       Navigator.pushNamed(context, Routes.profile);
     }
   }
 
-  /// Show bottom sheet when user selects 'Location'
+  /// Show modal bottom sheet for location info
   void _showBottomSheet(String type) {
     showModalBottomSheet(
       context: context,
@@ -142,7 +155,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
-    _positionStream?.cancel(); // Clean up the stream
+    _positionStream?.cancel(); // Stop listening to location updates
     super.dispose();
   }
 
@@ -151,15 +164,16 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Google Map
+          // 🌍 Google Map Widget
           GoogleMap(
             initialCameraPosition: _initialCameraPosition,
             mapType: MapType.normal,
             myLocationEnabled: true,
             myLocationButtonEnabled: true,
             zoomControlsEnabled: false,
-            onMapCreated: (controller) => _controller.complete(controller),
+            minMaxZoomPreference: const MinMaxZoomPreference(10, 20), // Prevent over-zoom
             markers: {
+              // Static marker at the center
               Marker(
                 markerId: const MarkerId("center"),
                 position: _initialLatLng,
@@ -167,9 +181,20 @@ class _MapScreenState extends State<MapScreen> {
               ),
               if (_userMarker != null) _userMarker!,
             },
+            onMapCreated: (controller) {
+              _mapController = controller;
+              _controller.complete(controller);
+              _setMapStyle(); // Load map style from JSON
+            },
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
+              Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
+              Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+              Factory<VerticalDragGestureRecognizer>(() => VerticalDragGestureRecognizer()),
+            }, // Enable all gestures
           ),
 
-          // AppBar (moved up a bit)
+          // 📌 Top App Bar with profile
           Positioned(
             top: 20,
             left: 0,
@@ -179,19 +204,11 @@ class _MapScreenState extends State<MapScreen> {
               elevation: 0,
               centerTitle: true,
               title: const Text('Map', style: TextStyle(color: Colors.black)),
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: CircleAvatar(
-                    backgroundImage: AssetImage('assets/images/profile.jpg'),
-                    radius: 18,
-                  ),
-                ),
-              ],
+              // No profile image
             ),
           ),
 
-          // Zoom In/Out Buttons
+          // ➕ Zoom In/Out Buttons
           Positioned(
             bottom: 100,
             right: 16,
@@ -218,7 +235,7 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
 
-      // Bottom Navigation Bar
+      // 🔻 Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onNavTap,

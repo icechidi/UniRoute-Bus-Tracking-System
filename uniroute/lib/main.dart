@@ -14,5 +14,5 @@ class BusApp extends StatelessWidget {
       onGenerateRoute: AppRoutes.generateRoute, // ✅ Route generator
     );
   }
+
 }
-      
