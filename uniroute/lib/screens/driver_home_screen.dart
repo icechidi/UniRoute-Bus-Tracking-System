@@ -103,6 +103,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       );
       return;
     }
+
     await startTripOnBackend(selectedRoute!, selectedTime!, selectedBusId!, widget.driver['id']);
     _startSendingLocation();
     setState(() {
@@ -128,21 +129,26 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   // --- Backend API Calls ---
-  Future<void> startTripOnBackend(String route, String time, String busId, String driverId) async {
-    final url = Uri.parse('http://172.55.4.160:3000/api/trips/start');
+  Future<void> startTripOnBackend(
+      String route, String time, String busId, String driverId) async {
+    final url = Uri.parse('https://172.55.4.160:3000/api/trips/start');
     final body = jsonEncode({
-      'route': route,
+      'route_id': route,
       'time': time,
-      'busId': busId,
-      'driverId': driverId,
+      'bus_id': busId,
+      'driver_id': driverId,
     });
+
     try {
-      final response = await http.post(url, body: body, headers: {'Content-Type': 'application/json'});
-      if (response.statusCode != 200) {
-        print('Failed to start trip: ${response.body}');
-      }
+      print('🚍 Sending start trip: $body');
+      final response = await http.post(
+        url,
+        body: body,
+        headers: {'Content-Type': 'application/json'},
+      );
+      print('✅ Start trip response: ${response.statusCode} - ${response.body}');
     } catch (e) {
-      print('Error starting trip: $e');
+      print('❌ Error starting trip: $e');
     }
   }
 
@@ -196,6 +202,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 _selectedIndex = 1;
               });
             },
+            emergencyButton: _buildEmergencyButton(), // Pass the button here
           );
           break;
         case BusPage.preTrip:
@@ -247,26 +254,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         child: Column(
           children: [
             Expanded(child: bodyContent),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.warning, color: Colors.white),
-                  label: const Text('Emergency', style: TextStyle(color: Colors.white)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () {
-                    // TODO: Implement emergency action
-                  },
-                ),
-              ),
-            ),
+
+
           ],
         ),
       ),
@@ -330,6 +319,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           icon,
           color: isSelected ? Colors.white : Colors.grey[600],
           size: 24,
+        ),
+      ),
+    );
+  }
+
+  // Emergency button widget
+  Widget _buildEmergencyButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.warning, color: Colors.white),
+          label: const Text('Emergency', style: TextStyle(color: Colors.white)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          onPressed: () {
+            // TODO: Implement emergency action
+          },
         ),
       ),
     );

@@ -177,12 +177,12 @@ class _MapScreenState extends State<MapScreen> {
   }
 
     @override
-    void initState() {
-      super.initState();
-      _initializeLocation();
-      _fetchRouteFromORS();
-      _listenToBusLocation();
-    }
+  void initState() {
+    super.initState();
+    _initializeLocation();
+    _fetchRouteFromORS();
+    _listenToBusLocation();
+  }
 
 
   String _getMapUrl() {

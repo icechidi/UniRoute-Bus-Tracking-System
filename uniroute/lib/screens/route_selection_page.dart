@@ -11,12 +11,14 @@ import '../utils/route_services.dart';
 class RouteSelectionPage extends StatefulWidget {
   final void Function(String route, String time) onContinue;
   final VoidCallback onProfileTap;
+  final Widget? emergencyButton;
 
   const RouteSelectionPage({
-    super.key,
+    Key? key,
     required this.onContinue,
     required this.onProfileTap,
-  });
+    this.emergencyButton,
+  }) : super(key: key);
 
   @override
   State<RouteSelectionPage> createState() => _RouteSelectionPageState();

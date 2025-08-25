@@ -70,10 +70,14 @@ class _BusSelectionPageState extends State<BusSelectionPage> {
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: ListTile(
                         leading: const Icon(Icons.directions_bus, color: Colors.deepPurple),
-                        title: Text(
-                          (bus['number'] != null ? 'Bus ${bus['number']}' : bus['name'] ?? 'Bus ${bus['id']}'),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                          title: Text(
+                            bus['number'] != null && bus['number'].toString().trim().isNotEmpty
+                                ? 'Bus ${bus['number']}'
+                                : (bus['name'] != null && bus['name'].toString().trim().isNotEmpty
+                                    ? bus['name']
+                                    : 'Bus ${bus['id']}'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

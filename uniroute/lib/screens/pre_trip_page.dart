@@ -8,7 +8,7 @@ class PreTripPage extends StatelessWidget {
   final String busId;
   final VoidCallback onStartTrip;
   final VoidCallback onProfileTap;
-  final VoidCallback onBack; // ✅ Add this
+  final VoidCallback onBack;
 
   const PreTripPage({
     super.key,
@@ -17,14 +17,14 @@ class PreTripPage extends StatelessWidget {
     required this.busId,
     required this.onStartTrip,
     required this.onProfileTap,
-    required this.onBack, // ✅ Add this
+    required this.onBack,
   });
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        onBack(); // ✅ Trigger state reset
+        onBack();
         return false;
       },
       child: Scaffold(
@@ -32,7 +32,7 @@ class PreTripPage extends StatelessWidget {
         appBar: UniversalAppBar(
           title: 'Bus',
           showBack: true,
-          onBack: onBack, // ✅ Use passed function
+          onBack: onBack,
           onProfileTap: onProfileTap,
         ),
         body: Column(
@@ -56,13 +56,19 @@ class PreTripPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text('Time – $time'),
-                          Text(busId),
+                          Text('Bus ID: $busId'),
                         ],
                       ),
                     ),
                     const SizedBox(height: 50),
-                    GestureDetector(
-                      onTap: onStartTrip,
+
+                    // --- Start Trip Button ---
+                    InkWell(
+                      onTap: () {
+                        print("▶️ Start Trip button tapped");
+                        onStartTrip();
+                      },
+                      borderRadius: BorderRadius.circular(70),
                       child: Container(
                         width: 140,
                         height: 140,
