@@ -13,7 +13,7 @@ class AuthServices {
 
   // 👇 Replace with your private IP and port if needed
   // Example: backend machine IP = 192.168.1.50
-  static const String loginUrl = 'http://172.55.6.33:3000/api/auth/login';
+  static const String loginUrl = 'http://172.55.4.160:3000/api/auth/login';
 
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 

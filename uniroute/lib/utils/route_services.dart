@@ -1,4 +1,4 @@
-// route_services.dart
+// utils/route_services.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 
 class RouteServices {
   // Update this if your backend host/path differs
-  static const String baseUrl = 'http://172.55.6.33:3000/api';
+  static const String baseUrl = 'http://172.55.4.160:3000/api';
 
   // in-memory cache keyed by normalized id string
   static final Map<String, List<String>> _timesCache = {};
@@ -136,7 +136,8 @@ class RouteServices {
   }
 
   /// Robust fetch of route times.
-  /// Tries several likely endpoint shapes if some return 404.
+  /// Prefer explicit filtered endpoints; if endpoint returns items for multiple routes,
+  /// filter by route_id locally and return a List<String> of HH:mm times.
   static Future<List<String>> fetchRouteTimes(dynamic routeId,
       {Duration timeout = const Duration(seconds: 10)}) async {
     if (routeId == null) return [];
@@ -151,16 +152,15 @@ class RouteServices {
 
     final headers = await AuthServices.authHeaders();
 
-    // Candidate paths to try
+    // Prefer endpoints that should be already filtered on server
     final candidatePaths = <String>[
+      '/route-times?route_id=$idStr',
       '/routes/$idStr/times',
       '/routes/$idStr/route_times',
       '/route_times?route_id=$idStr',
       '/route-times?route_id=$idStr',
       '/route_times/$idStr',
       '/route_times/route/$idStr',
-      '/routes/times?route_id=$idStr',
-      '/routes/times?id=$idStr',
     ];
 
     Exception? lastException;
@@ -179,15 +179,13 @@ class RouteServices {
 
         if (resp.statusCode == 200) {
           final dynamic decoded = json.decode(resp.body);
-          final parsed = <String>[];
+          List<dynamic> items = [];
 
+          // Normalize variety of shapes to items list
           if (decoded is List) {
-            for (final item in decoded) {
-              final t = _parseTime(item);
-              if (t.isNotEmpty) parsed.add(t);
-            }
+            items = decoded;
           } else if (decoded is Map) {
-            // common wrappers
+            // try known wrappers
             final candidates = [
               decoded['data'],
               decoded['times'],
@@ -198,27 +196,75 @@ class RouteServices {
             var foundList = false;
             for (final c in candidates) {
               if (c is List) {
-                for (final item in c) {
-                  final t = _parseTime(item);
-                  if (t.isNotEmpty) parsed.add(t);
-                }
+                items = c;
                 foundList = true;
                 break;
               }
             }
             if (!foundList) {
-              final t = _parseTime(decoded);
-              if (t.isNotEmpty) parsed.add(t);
+              // if map contains key equal to route id and that key is a list, prefer it
+              if (decoded.containsKey(idStr) && decoded[idStr] is List) {
+                items = decoded[idStr];
+              } else {
+                // fallback to treating the decoded map itself as a single item
+                items = [decoded];
+              }
             }
           } else {
-            // fallback: split by commas or take trimmed body
             final s = resp.body;
-            if (s.contains(','))
-              parsed.addAll(s.split(',').map((e) => _trimToHourMinute(e)));
-            else {
-              final t = _trimToHourMinute(s);
+            if (s.contains(',')) {
+              items = s.split(',');
+            } else {
+              items = [s];
+            }
+          }
+
+          // If items have route_id fields, filter locally by route id
+          final bool anyItemHasRouteId = items.any((it) =>
+              it is Map &&
+              (it.containsKey('route_id') ||
+                  it.containsKey('routeId') ||
+                  it.containsKey('route')));
+          List<dynamic> filteredItems = items;
+          if (anyItemHasRouteId) {
+            final matches = items.where((it) {
+              if (it is Map) {
+                final rid = it['route_id'] ?? it['routeId'] ?? it['route'];
+                final nid = _normalizeId(rid);
+                return nid == idStr;
+              }
+              return false;
+            }).toList();
+
+            if (matches.isNotEmpty) {
+              filteredItems = matches;
+            } else {
+              // endpoint returned items with route tags but not ours -> try next candidate
+              debugPrint(
+                  'RouteServices: $uri returned route-tagged items but none matched $idStr; trying next.');
+              continue;
+            }
+          }
+
+          // Parse times from filteredItems
+          final parsed = <String>[];
+          for (final item in filteredItems) {
+            final t = _parseTime(item);
+            if (t.isNotEmpty) parsed.add(t);
+          }
+
+          // If parsed empty but original items were plain strings, try mapping them directly
+          if (parsed.isEmpty && items.isNotEmpty) {
+            for (final it in items) {
+              final t = _parseTime(it);
               if (t.isNotEmpty) parsed.add(t);
             }
+          }
+
+          if (parsed.isEmpty) {
+            debugPrint(
+                'RouteServices: parsed times empty for $uri, trying next candidate.');
+            continue;
           }
 
           // dedupe while preserving order
@@ -230,14 +276,12 @@ class RouteServices {
           _timesCache[idStr] = unique;
           return List<String>.from(unique);
         } else if (resp.statusCode == 404) {
-          // not the right endpoint — try next candidate
           debugPrint(
               'RouteServices: $uri returned 404, trying next candidate.');
           continue;
         } else {
-          // other error (401/403/500/etc) — surface it
           throw Exception(
-              'Failed to load route times for $idStr: ${resp.statusCode} ${preview}');
+              'Failed to load route times for $idStr: ${resp.statusCode} $preview');
         }
       } on TimeoutException catch (e) {
         lastException =

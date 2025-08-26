@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
-import 'student_login_screen.dart';
-import 'driver_login_screen.dart';
+import 'student/student_login_screen.dart';
+import 'driver/driver_login_screen.dart';
 import '../constants.dart';
 
 class RoleSelectorScreen extends StatefulWidget {
