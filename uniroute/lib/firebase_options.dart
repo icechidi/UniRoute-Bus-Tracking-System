@@ -34,6 +34,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '87170443990',
     projectId: 'uniroute-36e10',
     authDomain: 'uniroute-36e10.firebaseapp.com',
+    databaseURL: 'https://uniroute-36e10-default-rtdb.europe-west1.firebasedatabase.app',
     storageBucket: 'uniroute-36e10.firebasestorage.app',
     measurementId: 'G-HVG6ZY3RLP',
   );
@@ -43,6 +44,7 @@ class DefaultFirebaseOptions {
     appId: '1:87170443990:android:753be3a00c10061c593777',
     messagingSenderId: '87170443990',
     projectId: 'uniroute-36e10',
+    databaseURL: 'https://uniroute-36e10-default-rtdb.europe-west1.firebasedatabase.app',
     storageBucket: 'uniroute-36e10.firebasestorage.app',
   );
 
@@ -51,9 +53,10 @@ class DefaultFirebaseOptions {
     appId: '1:87170443990:ios:005d3ffcd3d3e132593777',
     messagingSenderId: '87170443990',
     projectId: 'uniroute-36e10',
+    databaseURL: 'https://uniroute-36e10-default-rtdb.europe-west1.firebasedatabase.app',
     storageBucket: 'uniroute-36e10.firebasestorage.app',
-    iosClientId:
-        '87170443990-7olu0p0hs5ksqnd4ufknfa958sofatmn.apps.googleusercontent.com',
+    androidClientId: '87170443990-1jut59e86q6e9gturr0csmpcpcenioei.apps.googleusercontent.com',
+    iosClientId: '87170443990-7olu0p0hs5ksqnd4ufknfa958sofatmn.apps.googleusercontent.com',
     iosBundleId: 'com.example.uniroute',
   );
 

@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "87170443990",
+    "firebase_url": "https://uniroute-36e10-default-rtdb.europe-west1.firebasedatabase.app",
     "project_id": "uniroute-36e10",
     "storage_bucket": "uniroute-36e10.firebasestorage.app"
   },
@@ -13,6 +14,22 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "87170443990-1jut59e86q6e9gturr0csmpcpcenioei.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.uniroute",
+            "certificate_hash": "f91d3ea4d6b864f867f5973e2789d826e992f37a"
+          }
+        },
+        {
+          "client_id": "87170443990-v634374dehjv9s5tvtfqumb9i3igkknk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.uniroute",
+            "certificate_hash": "86aab7133f859fde9fefe09ee08b619d6774b9cb"
+          }
+        },
         {
           "client_id": "87170443990-f0ev561n5bin8f2mndsm62d0hnlhgdqs.apps.googleusercontent.com",
           "client_type": 3
