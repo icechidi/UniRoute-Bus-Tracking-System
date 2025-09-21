@@ -58,7 +58,7 @@ class _MapScreenState extends State<MapScreen> {
       final logic = MapLogic(busId: id);
       _logics[id] = logic;
       // Create a listener that calls setState when any logic changes
-      final listener = () => setState(() {});
+      listener() => setState(() {});
       logic.addListener(listener);
       _logicListeners[id] = listener;
     }
@@ -211,7 +211,7 @@ class _MapScreenState extends State<MapScreen> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _currentCenter ?? LatLng(35.1264, 33.4299),
+              initialCenter: _currentCenter ?? const LatLng(35.1264, 33.4299),
               initialZoom: _currentZoom,
               onMapEvent: (event) {
                 try {
