@@ -37,7 +37,7 @@ class _BusSelectionPageState extends State<BusSelectionPage> {
 
     try {
       final response =
-          await http.get(Uri.parse('http://172.55.4.160:3000/api/buses'));
+          await http.get(Uri.parse('http://185.51.26.203:3000/api/buses'));
       rawResponseBody = response.body;
       print('🟦 raw buses response: ${response.body}');
 
