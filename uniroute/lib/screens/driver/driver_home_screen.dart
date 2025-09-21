@@ -9,7 +9,6 @@ import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
-import '../student/map_screen.dart';
 
 enum BusPage { route, preTrip, activeTrip }
 
@@ -117,7 +116,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (driverId == null) return;
 
       try {
-        final url = Uri.parse('http://172.55.4.160:3000/api/trips/update-location');
+        final url = Uri.parse('http://185.51.26.203:3000/api/trips/update-location');
         final body = jsonEncode({
           'bus_id': selectedBusId,
           'driver_id': driverId,
@@ -244,7 +243,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     double? latitude,
     double? longitude,
   ) async {
-    final url = Uri.parse('http://172.55.4.160:3000/api/trips/start');
+    final url = Uri.parse('http://185.51.26.203:3000/api/trips/start');
     final body = jsonEncode({
       'route_id': route,
       'start_time': time,
@@ -268,7 +267,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   Future<void> endTripOnBackend(
       String route, String startTime, String busId, String driverId, String endTime) async {
-    final url = Uri.parse('http://172.55.4.160:3000/api/trips/end');
+    final url = Uri.parse('http://185.51.26.203:3000/api/trips/end');
     final body = jsonEncode({
       'route_id': route,
       'start_time': startTime,
