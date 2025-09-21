@@ -46,7 +46,7 @@ class MapLogic extends ChangeNotifier {
 
   // --- configure ---
   // Put your API base here; make static so it's consistent across instances
-  static const String apiBaseUrl = 'http://172.55.4.160:3000';
+  static const String apiBaseUrl = 'http://185.51.26.203:3000';
 
   // ORS key (optional — keep empty to disable ORS usage)
   static const String _orsApiKey =
@@ -155,7 +155,7 @@ class MapLogic extends ChangeNotifier {
           final Map<dynamic, dynamic> node = Map<dynamic, dynamic>.from(val);
 
           final statusRaw = node['status'] ?? node['state'];
-          busStatus = statusRaw != null ? statusRaw.toString() : null;
+          busStatus = statusRaw?.toString();
 
           final loc = node['location'];
           double? lat;
@@ -220,8 +220,9 @@ class MapLogic extends ChangeNotifier {
 
       final body = jsonDecode(resp.body);
       if (body is! List) {
-        if (kDebugMode)
+        if (kDebugMode) {
           print('Unexpected route_stops response format; expected array.');
+        }
         return;
       }
 
@@ -233,8 +234,9 @@ class MapLogic extends ChangeNotifier {
         final lat = _toDouble(raw['latitude']) ?? _toDouble(raw['lat']);
         final lng = _toDouble(raw['longitude']) ?? _toDouble(raw['lng']);
 
-        if (routeId == null || stopOrder == null || lat == null || lng == null)
+        if (routeId == null || stopOrder == null || lat == null || lng == null) {
           continue;
+        }
 
         grouped.putIfAbsent(routeId, () => []).add({
           'stop_order': stopOrder,
@@ -378,9 +380,10 @@ class MapLogic extends ChangeNotifier {
       final segmentPolyline = await fetchPolylineForCoords(segmentStops);
 
       if (segmentPolyline == null || segmentPolyline.isEmpty) {
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
               'ORS chunk call failed; falling back to local densify for full route.');
+        }
         fullPolyline = _densifyPolyline(stops, _densifyStepMeters);
         break;
       }
@@ -405,7 +408,7 @@ class MapLogic extends ChangeNotifier {
   List<LatLng> _densifyPolyline(List<LatLng> stops, double stepMeters) {
     if (stops.length < 2) return List<LatLng>.from(stops);
 
-    final Distance distance = const Distance();
+    const Distance distance = Distance();
     final List<LatLng> result = [];
 
     for (int i = 0; i < stops.length - 1; i++) {
