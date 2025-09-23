@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum BusPage { route, preTrip, activeTrip }
 
@@ -43,11 +44,47 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _busPage = BusPage.route;
     _previousPage = _busPage;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       print('👤 Driver object at init: ${widget.driver}');
+      await _restoreTripState();
     });
   }
 
+  // --- Persistent State Handling ---
+
+  Future<void> _saveTripState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('selectedRoute', selectedRoute ?? '');
+    await prefs.setString('selectedTime', selectedTime ?? '');
+    await prefs.setString('selectedBusId', selectedBusId ?? '');
+    await prefs.setBool('isTripActive', _busPage == BusPage.activeTrip);
+  }
+
+  Future<void> _clearTripState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('selectedRoute');
+    await prefs.remove('selectedTime');
+    await prefs.remove('selectedBusId');
+    await prefs.remove('isTripActive');
+  }
+
+  Future<void> _restoreTripState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isTripActive = prefs.getBool('isTripActive') ?? false;
+
+    if (isTripActive) {
+      setState(() {
+        selectedRoute = prefs.getString('selectedRoute');
+        selectedTime = prefs.getString('selectedTime');
+        selectedBusId = prefs.getString('selectedBusId');
+        _busPage = BusPage.activeTrip;
+      });
+
+      _startSendingLocation(); // Resume sending location immediately
+    }
+  }
+
+  // --- UI Navigation ---
   void _onTabTapped(int index) {
     setState(() {
       if (index == 1) _previousPage = _busPage;
@@ -100,6 +137,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
+  // --- Location Handling ---
   void _startSendingLocation() {
     _locationStream?.cancel();
     if (selectedBusId == null) return;
@@ -116,7 +154,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (driverId == null) return;
 
       try {
-        final url = Uri.parse('http://185.51.26.203:3000/api/trips/update-location');
+        final url =
+            Uri.parse('http://185.51.26.203:3000/api/trips/update-location');
         final body = jsonEncode({
           'bus_id': selectedBusId,
           'driver_id': driverId,
@@ -132,7 +171,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         );
 
         if (response.statusCode != 200) {
-          print("⚠️ Location update failed: ${response.statusCode} - ${response.body}");
+          print(
+              "⚠️ Location update failed: ${response.statusCode} - ${response.body}");
         }
       } catch (e) {
         print("❌ Error sending location to backend: $e");
@@ -155,6 +195,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         ?.toString();
   }
 
+  // --- Trip Lifecycle ---
   Future<void> _goToActiveTrip() async {
     if (selectedRoute == null ||
         selectedTime == null ||
@@ -175,7 +216,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       return;
     }
 
-    // ✅ Capture current location right before starting trip
     Position? position;
     try {
       position = await Geolocator.getCurrentPosition(
@@ -198,6 +238,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     setState(() {
       _busPage = BusPage.activeTrip;
     });
+
+    await _saveTripState(); // ✅ persist state
   }
 
   Future<void> _endTrip() async {
@@ -208,21 +250,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }
 
     final driverId = _resolveDriverId();
-    if (driverId == null || driverId.trim().isEmpty) {
-      _stopSendingLocation();
-      setState(() {
-        selectedRoute = null;
-        selectedTime = null;
-        selectedBusId = null;
-        _busPage = BusPage.route;
-      });
-      return;
-    }
-
     final endTime = _formatTime(DateTime.now());
 
-    await endTripOnBackend(
-        selectedRoute!, selectedTime!, selectedBusId!, driverId, endTime);
+    if (driverId != null && driverId.trim().isNotEmpty) {
+      await endTripOnBackend(
+          selectedRoute!, selectedTime!, selectedBusId!, driverId, endTime);
+    }
 
     _stopSendingLocation();
 
@@ -232,6 +265,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       selectedBusId = null;
       _busPage = BusPage.route;
     });
+
+    await _clearTripState(); // ✅ clear state
   }
 
   // --- Backend API Calls ---
@@ -265,8 +300,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }
   }
 
-  Future<void> endTripOnBackend(
-      String route, String startTime, String busId, String driverId, String endTime) async {
+  Future<void> endTripOnBackend(String route, String startTime, String busId,
+      String driverId, String endTime) async {
     final url = Uri.parse('http://185.51.26.203:3000/api/trips/end');
     final body = jsonEncode({
       'route_id': route,
@@ -287,7 +322,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       print('❌ Error ending trip: $e');
     }
   }
-  // --- End Backend API Calls ---
 
   @override
   void dispose() {
@@ -295,6 +329,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     super.dispose();
   }
 
+  // --- UI ---
   @override
   Widget build(BuildContext context) {
     Widget bodyContent;
