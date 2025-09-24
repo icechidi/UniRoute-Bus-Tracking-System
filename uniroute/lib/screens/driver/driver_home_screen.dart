@@ -47,11 +47,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       print('👤 Driver object at init: ${widget.driver}');
       await _restoreTripState();
+      await _checkActiveTripFromBackend(); // ✅ Backend verification
     });
   }
 
   // --- Persistent State Handling ---
-
   Future<void> _saveTripState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('selectedRoute', selectedRoute ?? '');
@@ -80,7 +80,39 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         _busPage = BusPage.activeTrip;
       });
 
-      _startSendingLocation(); // Resume sending location immediately
+      _startSendingLocation();
+    }
+  }
+
+  /// ✅ Backend check to sync trip state
+  Future<void> _checkActiveTripFromBackend() async {
+    final driverId = _resolveDriverId();
+    if (driverId == null) return;
+
+    final url = Uri.parse(
+        'http://185.51.26.203:3000/api/trips/active?driver_id=$driverId');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['active'] == true) {
+          // Update state from server
+          setState(() {
+            selectedRoute = data['route_id'];
+            selectedTime = data['start_time'];
+            selectedBusId = data['bus_id'];
+            _busPage = BusPage.activeTrip;
+          });
+
+          _startSendingLocation();
+          await _saveTripState(); // persist it locally
+        }
+      } else {
+        print("⚠️ Active trip check failed: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("❌ Could not check active trip: $e");
     }
   }
 
@@ -239,7 +271,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _busPage = BusPage.activeTrip;
     });
 
-    await _saveTripState(); // ✅ persist state
+    await _saveTripState();
   }
 
   Future<void> _endTrip() async {
@@ -266,7 +298,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _busPage = BusPage.route;
     });
 
-    await _clearTripState(); // ✅ clear state
+    await _clearTripState();
   }
 
   // --- Backend API Calls ---
